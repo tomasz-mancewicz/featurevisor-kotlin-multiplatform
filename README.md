@@ -1,3 +1,6 @@
+[![](https://jitpack.io/v/tomasz-mancewicz/featurevisor-kotlin-multiplatform.svg)](https://jitpack.io/#tomasz-mancewicz/featurevisor-kotlin-multiplatform)
+
+
 # Featurevisor Kotlin Multiplatform
 
 A complete Kotlin Multiplatform SDK for [Featurevisor](https://featurevisor.com) - feature flags, experiments, and remote config management.
