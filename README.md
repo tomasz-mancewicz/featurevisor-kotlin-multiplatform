@@ -2,7 +2,7 @@
 
 A complete Kotlin Multiplatform SDK for [Featurevisor](https://featurevisor.com) - feature flags, experiments, and remote config management.
 
-> **Note**: This is an independent implementation forked and significantly extended from the original [featurevisor-kotlin](https://github.com/featurevisor/featurevisor-kotlin) repository. While the original was marked as "work in progress," this implementation provides a fully functional Kotlin Multiplatform solution with comprehensive feature parity.
+> **Note**: This is an independent implementation forked and extended from the original [featurevisor-kotlin](https://github.com/featurevisor/featurevisor-kotlin) repository. This implementation provides a fully functional Kotlin Multiplatform solution.
 
 ## ✨ Features
 
@@ -148,10 +148,8 @@ This implementation provides:
 
 This repository was forked from the original [featurevisor-kotlin](https://github.com/featurevisor/featurevisor-kotlin) project but has been:
 
-- Completely rewritten and extended
-- Made fully functional with comprehensive feature parity
-- Enhanced with testing and benchmarking capabilities
-- Optimized for production use
+- Platform speciffic parts rewritten and extended
+- Updated dependencies for multiplatform support
 
 **Credits to the original Featurevisor team** for creating the excellent JavaScript SDK and ecosystem that inspired this implementation.
 
