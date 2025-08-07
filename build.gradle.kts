@@ -7,6 +7,7 @@ plugins {
     kotlin("plugin.allopen") version "2.2.0"
     id("com.android.library") version "8.10.1"
     id("dev.mokkery") version "2.9.0"
+    id("maven-publish")
 }
 
 group = "com.featurevisor"
@@ -105,4 +106,16 @@ android {
 
 allOpen {
     annotation("com.featurevisor.utils.OpenForMokkery")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["kotlin"])
+
+            groupId = "com.featurevisor"
+            artifactId = "featurevisor-kotlin-multiplatform"
+            version = project.version.toString()
+        }
+    }
 }
