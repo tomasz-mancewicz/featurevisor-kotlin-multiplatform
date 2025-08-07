@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.featurevisor"
-version = "0.1.0"
+version = "0.1.2"
 
 kotlin {
 
@@ -34,14 +34,20 @@ kotlin {
         publishLibraryVariants("release", "debug")
     }
 
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "FeaturevisorSDK"
-            isStatic = true
+    val hostOs = System.getProperty("os.name")
+    val isMacosX64 = hostOs == "Mac OS X"
+    val isMacosArm64 = hostOs == "Mac OS X" && System.getProperty("os.arch") == "aarch64"
+
+    if (isMacosX64 || isMacosArm64) {
+        listOf(
+            iosX64(),
+            iosArm64(),
+            iosSimulatorArm64()
+        ).forEach { iosTarget ->
+            iosTarget.binaries.framework {
+                baseName = "FeaturevisorSDK"
+                isStatic = true
+            }
         }
     }
 
@@ -84,9 +90,10 @@ kotlin {
             implementation("io.ktor:ktor-client-okhttp:2.3.7")
         }
 
-        iosMain.dependencies {
-            // Ktor iOS engine
-            implementation("io.ktor:ktor-client-darwin:2.3.7")
+        if (isMacosX64 || isMacosArm64) {
+            iosMain.dependencies {
+                implementation("io.ktor:ktor-client-darwin:2.3.7")
+            }
         }
     }
 }
