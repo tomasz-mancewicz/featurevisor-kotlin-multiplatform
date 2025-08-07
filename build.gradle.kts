@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.featurevisor"
-version = "0.1.2"
+version = "1.0-SNAPSHOT"
 
 kotlin {
 
@@ -117,13 +117,50 @@ allOpen {
 }
 
 publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/tomasz-mancewicz/featurevisor-kotlin-multiplatform")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user") as String?
+                password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token") as String?
+            }
+        }
+    }
+
     publications {
         create<MavenPublication>("maven") {
             from(components["kotlin"])
 
-            groupId = "com.featurevisor"
+            groupId = "com.github.tomasz-mancewicz"
             artifactId = "featurevisor-kotlin-multiplatform"
             version = project.version.toString()
+
+            pom {
+                name.set("Featurevisor Kotlin Multiplatform")
+                description.set("Kotlin Multiplatform SDK for Featurevisor")
+                url.set("https://github.com/tomasz-mancewicz/featurevisor-kotlin-multiplatform")
+
+                licenses {
+                    license {
+                        name.set("MIT")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+
+                developers {
+                    developer {
+                        id.set("tomasz-mancewicz")
+                        name.set("Tomasz Mancewicz")
+                    }
+                }
+
+                scm {
+                    connection.set("scm:git:git://github.com/tomasz-mancewicz/featurevisor-kotlin-multiplatform.git")
+                    developerConnection.set("scm:git:ssh://github.com/tomasz-mancewicz/featurevisor-kotlin-multiplatform.git")
+                    url.set("https://github.com/tomasz-mancewicz/featurevisor-kotlin-multiplatform")
+                }
+            }
         }
     }
 }
