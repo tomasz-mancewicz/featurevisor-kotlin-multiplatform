@@ -1,0 +1,254 @@
+package com.featurevisor.sdk
+
+import com.featurevisor.types.AttributeValue
+import com.featurevisor.types.Condition
+import com.featurevisor.types.Condition.And
+import com.featurevisor.types.Condition.Not
+import com.featurevisor.types.Condition.Or
+import com.featurevisor.types.Condition.Plain
+import com.featurevisor.types.ConditionValue
+import com.featurevisor.types.Context
+import com.featurevisor.types.Operator.AFTER
+import com.featurevisor.types.Operator.BEFORE
+import com.featurevisor.types.Operator.CONTAINS
+import com.featurevisor.types.Operator.ENDS_WITH
+import com.featurevisor.types.Operator.EQUALS
+import com.featurevisor.types.Operator.GREATER_THAN
+import com.featurevisor.types.Operator.GREATER_THAN_OR_EQUALS
+import com.featurevisor.types.Operator.IN_ARRAY
+import com.featurevisor.types.Operator.LESS_THAN
+import com.featurevisor.types.Operator.LESS_THAN_OR_EQUALS
+import com.featurevisor.types.Operator.NOT_CONTAINS
+import com.featurevisor.types.Operator.NOT_EQUALS
+import com.featurevisor.types.Operator.NOT_IN_ARRAY
+import com.featurevisor.types.Operator.SEMVER_EQUALS
+import com.featurevisor.types.Operator.SEMVER_GREATER_THAN
+import com.featurevisor.types.Operator.SEMVER_GREATER_THAN_OR_EQUALS
+import com.featurevisor.types.Operator.SEMVER_LESS_THAN
+import com.featurevisor.types.Operator.SEMVER_LESS_THAN_OR_EQUALS
+import com.featurevisor.types.Operator.SEMVER_NOT_EQUALS
+import com.featurevisor.types.Operator.STARTS_WITH
+import net.swiftzer.semver.SemVer
+
+object Conditions {
+
+    fun conditionIsMatched(condition: Plain, context: Context): Boolean {
+        val (attributeKey, operator, conditionValue) = condition
+        val attributeValue = context.getOrElse(attributeKey) { null }
+
+        return when {
+            attributeValue is AttributeValue.StringValue && conditionValue is ConditionValue.StringValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value
+                    NOT_EQUALS -> attributeValue.value != conditionValue.value
+                    CONTAINS -> attributeValue.value?.contains(conditionValue.value.orEmpty()) ?: false
+                    NOT_CONTAINS -> attributeValue.value?.contains(conditionValue.value.orEmpty())?.not() ?: false
+                    STARTS_WITH -> attributeValue.value?.startsWith(conditionValue.value.orEmpty()) ?: false
+                    ENDS_WITH -> attributeValue.value?.endsWith(conditionValue.value.orEmpty()) ?: false
+                    SEMVER_EQUALS -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty(),
+                    ) == 0
+
+                    SEMVER_NOT_EQUALS -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty(),
+                    ) != 0
+
+                    SEMVER_GREATER_THAN -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty()
+                    ) == 1
+
+                    SEMVER_GREATER_THAN_OR_EQUALS -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty()
+                    ) >= 0
+
+                    SEMVER_LESS_THAN -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty()
+                    ) == -1
+
+                    SEMVER_LESS_THAN_OR_EQUALS -> compareVersions(
+                        attributeValue.value.orEmpty(),
+                        conditionValue.value.orEmpty()
+                    ) <= 0
+
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.IntValue && conditionValue is ConditionValue.IntValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value
+                    NOT_EQUALS -> attributeValue.value != conditionValue.value
+                    GREATER_THAN -> attributeValue.value > conditionValue.value
+                    GREATER_THAN_OR_EQUALS -> attributeValue.value >= conditionValue.value
+                    LESS_THAN -> attributeValue.value < conditionValue.value
+                    LESS_THAN_OR_EQUALS -> attributeValue.value <= conditionValue.value
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.DoubleValue && conditionValue is ConditionValue.DoubleValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value
+                    NOT_EQUALS -> attributeValue.value != conditionValue.value
+                    GREATER_THAN -> attributeValue.value > conditionValue.value
+                    GREATER_THAN_OR_EQUALS -> attributeValue.value >= conditionValue.value
+                    LESS_THAN -> attributeValue.value < conditionValue.value
+                    LESS_THAN_OR_EQUALS -> attributeValue.value <= conditionValue.value
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.BooleanValue && conditionValue is ConditionValue.BooleanValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value
+                    NOT_EQUALS -> attributeValue.value != conditionValue.value
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.StringValue && conditionValue is ConditionValue.ArrayValue -> {
+                when (operator) {
+                    IN_ARRAY -> attributeValue.value in conditionValue.values
+                    NOT_IN_ARRAY -> (attributeValue.value !in conditionValue.values)
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.IntValue && conditionValue is ConditionValue.ArrayValue -> {
+                when (operator) {
+                    IN_ARRAY -> attributeValue.value.toString() in conditionValue.values
+                    NOT_IN_ARRAY -> (attributeValue.value.toString() !in conditionValue.values)
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.DoubleValue && conditionValue is ConditionValue.StringValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value.toString() == conditionValue.value
+                    NOT_EQUALS -> attributeValue.value.toString() != conditionValue.value
+
+                    SEMVER_EQUALS -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty(),
+                    ) == 0
+
+                    SEMVER_NOT_EQUALS -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty(),
+                    ) != 0
+
+                    SEMVER_GREATER_THAN -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty()
+                    ) == 1
+
+                    SEMVER_GREATER_THAN_OR_EQUALS -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty()
+                    ) >= 0
+
+                    SEMVER_LESS_THAN -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty()
+                    ) == -1
+
+                    SEMVER_LESS_THAN_OR_EQUALS -> compareVersions(
+                        attributeValue.value.toString(),
+                        conditionValue.value.orEmpty()
+                    ) <= 0
+
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.StringValue && conditionValue is ConditionValue.IntValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value.toString()
+                    NOT_EQUALS -> attributeValue.value != conditionValue.value.toString()
+                    CONTAINS -> attributeValue.value?.contains(conditionValue.value.toString()) ?: false
+                    NOT_CONTAINS -> attributeValue.value?.contains(conditionValue.value.toString())?.not() ?: false
+                    STARTS_WITH -> attributeValue.value?.startsWith(conditionValue.value.toString()) ?: false
+                    ENDS_WITH -> attributeValue.value?.endsWith(conditionValue.value.toString()) ?: false
+                    else -> false
+                }
+            }
+
+            attributeValue is AttributeValue.DateValue && conditionValue is ConditionValue.DateTimeValue -> {
+                when (operator) {
+                    EQUALS -> attributeValue.value == conditionValue.value
+                    BEFORE -> attributeValue.value < conditionValue.value
+                    AFTER -> attributeValue.value > conditionValue.value
+                    else -> false
+                }
+            }
+
+            else -> false
+        }
+    }
+
+    fun allConditionsAreMatched(condition: Condition, context: Context): Boolean {
+        return when (condition) {
+            is Plain -> conditionIsMatched(condition, context)
+            is And -> condition.and.all { allConditionsAreMatched(it, context) }
+            is Or -> condition.or.any { allConditionsAreMatched(it, context) }
+            is Not -> condition.not.all { allConditionsAreMatched(it, context).not() }
+        }
+    }
+
+    private fun compareVersions(actual: String, condition: String): Int {
+        return try {
+            SemVer.parse(normalizeSemver(actual)).compareTo(SemVer.parse(normalizeSemver(condition)))
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    private fun normalizeSemver(version: String): String {
+        // Handle empty or null versions
+        if (version.isBlank()) return "0.0.0"
+
+        // Split by pre-release (-) and build metadata (+) first
+        val parts = version.split("-", "+")
+        val mainVersion = parts[0]
+        val preRelease = if (parts.size > 1 && parts[1].isNotEmpty()) parts[1] else null
+        val buildMetadata = if (parts.size > 2 && parts[2].isNotEmpty()) parts[2] else null
+
+        // Split main version by dots
+        val versionParts = mainVersion.split(".")
+        val normalizedParts = mutableListOf<String>()
+
+        // Ensure we have at least 3 parts (major.minor.patch)
+        for (i in 0..2) {
+            if (i < versionParts.size) {
+                // Clean and validate each part
+                val part = versionParts[i].trim()
+                val num = part.toIntOrNull() ?: 0
+                normalizedParts.add(num.coerceAtMost(999).toString())
+            } else {
+                // Pad missing parts with 0
+                normalizedParts.add("0")
+            }
+        }
+
+        // Build normalized version
+        var normalizedVersion = normalizedParts.joinToString(".")
+
+        // Add pre-release if present
+        if (preRelease != null) {
+            val cleanPreRelease = preRelease.split(".").joinToString(".") { it.trim() }
+            normalizedVersion += "-$cleanPreRelease"
+        }
+
+        // Add build metadata if present
+        if (buildMetadata != null) {
+            normalizedVersion += "+${buildMetadata.trim()}"
+        }
+
+        return normalizedVersion
+    }
+}
