@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.featurevisor"
-version = "0.0.1-SNAPSHOT"
+version = "0.1.0"
 
 kotlin {
 
@@ -31,6 +31,7 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
+        publishLibraryVariants("release", "debug")
     }
 
     listOf(
