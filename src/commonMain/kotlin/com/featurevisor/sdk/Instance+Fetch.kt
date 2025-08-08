@@ -8,31 +8,44 @@ import io.ktor.client.statement.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.http.*
+import kotlinx.coroutines.launch
+
+private val sharedJson = Json { ignoreUnknownKeys = true }
 
 // MARK: - Fetch datafile content
-internal suspend fun FeaturevisorInstance.fetchDatafileContent(
+internal fun FeaturevisorInstance.fetchDatafileContent(
     url: String,
     handleDatafileFetch: DatafileFetchHandler? = null,
     completion: (Result<DatafileContent>) -> Unit,
 ) {
+    println("🔍 fetchDatafileContent called with URL: $url")
+
     handleDatafileFetch?.let { handleFetch ->
+        println("📦 Using handleDatafileFetch override")
         val result = handleFetch(url)
         completion(result)
-    } ?: run {
-        fetchDatafileContentFromUrl(url, completion)
+        return
+    }
+
+    println("🚀 Launching coroutine to fetch datafile from URL")
+
+    this.fetchCoroutineScope.launch {
+        val result = fetchDatafileContentFromUrl(url)
+        println("✅ Coroutine completed with result: ${result.isSuccess}")
+        completion(result)
     }
 }
 
+
 private suspend fun fetchDatafileContentFromUrl(
     url: String,
-    completion: (Result<DatafileContent>) -> Unit,
-) {
-    try {
+): Result<DatafileContent> {
+    println("🌐 Attempting to fetch datafile from: $url")
+
+    return try {
         val client = HttpClient {
             install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                })
+                json(sharedJson)
             }
         }
 
@@ -42,38 +55,39 @@ private suspend fun fetchDatafileContentFromUrl(
             }
         }
 
+        println("📥 HTTP response received: ${response.status}")
+
         client.close()
 
-        if (response.status.isSuccess()) {
-            val responseBodyString = response.bodyAsText()
-            FeaturevisorInstance.companionLogger?.debug(responseBodyString)
+        val responseBodyString = response.bodyAsText()
 
+        FeaturevisorInstance.companionLogger?.debug(responseBodyString)
+        println("📄 Response body (truncated): ${responseBodyString.take(100)}")
+
+        if (response.status.isSuccess()) {
             try {
-                val json = Json {
-                    ignoreUnknownKeys = true
-                }
-                val content = json.decodeFromString<DatafileContent>(responseBodyString)
-                completion(Result.success(content))
-            } catch (throwable: Throwable) {
-                completion(
-                    Result.failure(
-                        FeaturevisorError.UnparsableJson(
-                            responseBodyString,
-                            throwable.message ?: "Failed to parse JSON"
-                        )
+                val content = sharedJson.decodeFromString<DatafileContent>(responseBodyString)
+                println("✅ Successfully parsed datafile content")
+                Result.success(content)
+            } catch (e: Throwable) {
+                println("❌ Failed to parse JSON: ${e.message}")
+                Result.failure(
+                    FeaturevisorError.UnparsableJson(
+                        responseBodyString,
+                        e.message ?: "Failed to parse JSON"
                     )
                 )
             }
         } else {
-            completion(
-                Result.failure(
-                    FeaturevisorError.FetchingDataFileFailed(
-                        "HTTP ${response.status.value}: ${response.status.description}"
-                    )
+            println("❌ HTTP error: ${response.status.value} ${response.status.description}")
+            Result.failure(
+                FeaturevisorError.FetchingDataFileFailed(
+                    "HTTP ${response.status.value}: ${response.status.description}"
                 )
             )
         }
-    } catch (throwable: Throwable) {
-        completion(Result.failure(throwable))
+    } catch (e: Throwable) {
+        println("❌ Exception while fetching datafile: ${e.message}")
+        Result.failure(e)
     }
 }

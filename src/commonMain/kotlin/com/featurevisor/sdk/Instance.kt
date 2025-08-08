@@ -12,6 +12,9 @@ import io.ktor.utils.io.core.toByteArray
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -43,6 +46,8 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
     private val addListener: (EventName, Listener) -> Unit
     private val removeListener: (EventName) -> Unit
     private val removeAllListeners: () -> Unit
+
+    internal val fetchCoroutineScope = options.coroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     internal val statuses = Statuses(ready = false, refreshInProgress = false)
 
@@ -107,7 +112,7 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
                     datafileReader = DatafileReader(options.datafile ?: emptyDatafile)
 
                     // Launch coroutine for fetching datafile
-                    CoroutineScope(Dispatchers.Default).launch {
+                    fetchCoroutineScope.launch {
                         fetchDatafileContent(datafileUrl, handleDatafileFetch) { result ->
                             if (result.isSuccess) {
                                 datafileReader = DatafileReader(result.getOrThrow())
@@ -151,5 +156,10 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
 
     fun getRevision(): String {
         return datafileReader.getRevision()
+    }
+
+    fun shutdown() {
+        fetchCoroutineScope.cancel()
+        refreshJob?.cancel()
     }
 }

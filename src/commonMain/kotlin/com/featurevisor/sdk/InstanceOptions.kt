@@ -3,6 +3,7 @@ package com.featurevisor.sdk
 import com.featurevisor.types.DatafileContent
 import com.featurevisor.types.InitialFeatures
 import com.featurevisor.types.StickyFeatures
+import kotlinx.coroutines.CoroutineScope
 
 typealias Listener = (Array<out Any>) -> Unit
 
@@ -23,6 +24,7 @@ data class InstanceOptions(
     val onError: Listener? = null,
     val refreshInterval: Long? = null, // seconds
     val stickyFeatures: StickyFeatures? = null,
+    val coroutineScope: CoroutineScope? = null,
 ) {
     companion object {
         private const val defaultBucketKeySeparator = "."
