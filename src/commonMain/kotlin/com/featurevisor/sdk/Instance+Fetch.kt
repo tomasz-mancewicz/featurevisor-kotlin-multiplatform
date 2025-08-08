@@ -2,12 +2,11 @@ package com.featurevisor.sdk
 
 import com.featurevisor.types.DatafileContent
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import io.ktor.http.Url
 import io.ktor.http.isSuccess
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -65,94 +64,64 @@ private fun fetchDatafileContentFromUrl(
     coroutineScope: CoroutineScope,
 ) {
     println("🌐 Creating HTTP request for: $url")
+    println("🌐 Using EXACT same client setup as working manual test")
 
-    try {
-        // Validate URL format
-        Url(url)
-        println("✅ URL validation passed")
-
-    } catch (throwable: Exception) {
-        println("❌ URL validation failed: ${throwable.message}")
-        completion(Result.failure(FeaturevisorError.InvalidUrl(url)))
-        return
-    }
-
-    // Launch coroutine for HTTP request
     coroutineScope.launch {
-        println("🧵 Coroutine started for HTTP request")
-
-        // Create simple HTTP client WITHOUT any plugins
-        val client = HttpClient()
-        println("🏭 Basic HTTP client created")
-
         try {
-            println("📤 Making GET request...")
+            println("📤 Starting HTTP request...")
 
-            val response = client.get(url) {
-                headers {
-                    append(HttpHeaders.ContentType, "application/json")
-                    println("📋 Added Content-Type header")
+            // Use the EXACT same HttpClient setup as your working manual test
+            val client = HttpClient {
+                // Copy your working client configuration here
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    })
                 }
             }
 
-            println("📥 Response received: ${response.status}")
+            val response = client.get(url)
 
-            // Get response body as text
-            val responseBodyString = response.bodyAsText()
-            println("📄 Response body received: ${responseBodyString.length} characters")
+            println("✅ HTTP Status: ${response.status}")
+            println("✅ Content-Type: ${response.headers["Content-Type"]}")
+
+            val content = response.bodyAsText()
+            println("✅ Response length: ${content.length}")
+
+            client.close()
 
             if (response.status.isSuccess()) {
-                println("✅ HTTP request successful, parsing JSON...")
-
-                // Log response for debugging
-                FeaturevisorInstance.companionLogger?.debug(responseBodyString)
+                println("✅ HTTP request successful, parsing response...")
 
                 try {
-                    // Parse JSON manually using kotlinx.serialization
-                    val json = Json {
+                    // Use the same parsing approach as your manual test
+                    val datafileContent = Json {
                         ignoreUnknownKeys = true
-                    }
-                    println("🔧 JSON parser configured")
+                        isLenient = true
+                    }.decodeFromString<DatafileContent>(content)
 
-                    val content = json.decodeFromString<DatafileContent>(responseBodyString)
-                    println("✅ Successfully parsed DatafileContent: ${content.features.size} features, revision ${content.revision}")
+                    println("✅ Successfully parsed DatafileContent")
+                    println("   - Schema: ${datafileContent.schemaVersion}")
+                    println("   - Revision: ${datafileContent.revision}")
+                    println("   - Features count: ${datafileContent.features.size}")
 
-                    completion(Result.success(content))
+                    completion(Result.success(datafileContent))
 
-                } catch (throwable: Throwable) {
-                    println("❌ JSON parsing failed: ${throwable}: ${throwable.message}")
-                    throwable.printStackTrace()
-
-                    completion(
-                        Result.failure(
-                            FeaturevisorError.UnparsableJson(
-                                responseBodyString,
-                                throwable.message ?: "JSON parsing failed"
-                            )
-                        )
-                    )
+                } catch (e: Exception) {
+                    println("❌ JSON parsing failed: ${e.message}")
+                    e.printStackTrace()
+                    completion(Result.failure(e))
                 }
             } else {
                 println("❌ HTTP request failed: ${response.status}")
-
-                completion(
-                    Result.failure(
-                        FeaturevisorError.UnparsableJson(
-                            responseBodyString,
-                            response.status.description
-                        )
-                    )
-                )
+                completion(Result.failure(Exception("HTTP error: ${response.status}")))
             }
 
         } catch (e: Exception) {
-            println("❌ HTTP request exception: ${e}: ${e.message}")
+            println("❌ Network error: ${e.message}")
             e.printStackTrace()
             completion(Result.failure(e))
-
-        } finally {
-            client.close()
-            println("🔌 HTTP client closed")
         }
     }
 }
