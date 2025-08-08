@@ -23,6 +23,11 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
+
+        // Configure the main class
+        mainRun {
+            mainClass.set("TestRunnerKt")
+        }
     }
 
     // Android target
@@ -87,6 +92,7 @@ kotlin {
 
         androidMain.dependencies {
             // Ktor Android engine
+            implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
             implementation("io.ktor:ktor-client-okhttp:3.1.3")
         }
 
@@ -114,6 +120,13 @@ android {
 
 allOpen {
     annotation("com.featurevisor.utils.OpenForMokkery")
+}
+
+tasks.register<JavaExec>("runTest") {
+    group = "application"
+    description = "Run Featurevisor test"
+    classpath = configurations["jvmRuntimeClasspath"] + kotlin.targets["jvm"].compilations["main"].output.allOutputs
+    mainClass.set("TestRunnerKt")
 }
 
 publishing {
