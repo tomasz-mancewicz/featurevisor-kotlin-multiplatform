@@ -1,19 +1,17 @@
 package com.featurevisor.sdk
 
 import com.featurevisor.types.DatafileContent
-import kotlinx.serialization.json.Json
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.http.*
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.headers
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-
-private val sharedJson = Json {
-    ignoreUnknownKeys = true
-    isLenient = true
-}
+import kotlinx.serialization.json.Json
 
 // MARK: - Fetch datafile content
 internal fun FeaturevisorInstance.fetchDatafileContent(
@@ -30,67 +28,112 @@ internal fun FeaturevisorInstance.fetchDatafileContent(
         return
     }
 
-    println("🚀 Launching coroutine to fetch datafile from URL")
+    println("🚀 Using direct HTTP fetch (Ktor version matching original OkHttp)")
+    fetchDatafileContentFromUrl(url, completion, this.fetchCoroutineScope)
+}
 
-    this.fetchCoroutineScope.launch {
-        val result = fetchDatafileContentFromUrl(url)
-        println("✅ Coroutine completed with result: ${result.isSuccess}")
-        completion(result)
+private fun fetchDatafileContentFromUrl(
+    url: String,
+    completion: (Result<DatafileContent>) -> Unit,
+    coroutineScope: CoroutineScope,
+) {
+    println("🌐 Creating HTTP request for: $url")
+
+    try {
+        // Validate URL format (equivalent to toHttpUrl() validation)
+        Url(url)
+        println("✅ URL validation passed")
+
+    } catch (throwable: Exception) {
+        println("❌ URL validation failed: ${throwable.message}")
+        completion(Result.failure(FeaturevisorError.InvalidUrl(url)))
+        return
+    }
+
+    // Launch in the background, but use callback pattern like original
+    coroutineScope.launch {
+        val client = HttpClient()
+
+        try {
+            println("📤 Starting HTTP request...")
+
+            val response = client.get(url) {
+                headers {
+                    // IMPORTANT: Match original exactly - it used Content-Type, not Accept
+                    append(HttpHeaders.ContentType, "application/json")
+                }
+            }
+
+            println("📥 HTTP response received: ${response.status}")
+
+            // Handle response (equivalent to onResponse callback)
+            handleResponse(response, completion)
+
+        } catch (e: Exception) {
+            // Handle failure (equivalent to onFailure callback)
+            println("❌ HTTP request exception: ${e}: ${e.message}")
+            e.printStackTrace()
+            completion(Result.failure(e))
+        } finally {
+            client.close()
+            println("🔌 HTTP client closed")
+        }
     }
 }
 
-
-private suspend fun fetchDatafileContentFromUrl(
-    url: String,
-): Result<DatafileContent> {
-    println("🌐 Attempting to fetch datafile from: $url")
-
-    return try {
-        val client = HttpClient {
-            install(ContentNegotiation) {
-                json(sharedJson)
-            }
-        }
-
-        val response = client.get(url) {
-            headers {
-                append(HttpHeaders.ContentType, "application/json")
-            }
-        }
-
-        println("📥 HTTP response received: ${response.status}")
-
-        client.close()
-
+private suspend fun handleResponse(
+    response: HttpResponse,
+    completion: (Result<DatafileContent>) -> Unit
+) {
+    try {
         val responseBodyString = response.bodyAsText()
-
-        FeaturevisorInstance.companionLogger?.debug(responseBodyString)
-        println("📄 Response body (truncated): ${responseBodyString.take(100)}")
+        println("📄 Response body length: ${responseBodyString.length}")
 
         if (response.status.isSuccess()) {
+            println("✅ HTTP request successful, parsing response...")
+
+            // Create Json instance matching original configuration
+            val json = Json {
+                ignoreUnknownKeys = true
+            }
+
+            // Log response like original
+            FeaturevisorInstance.companionLogger?.debug(responseBodyString)
+
             try {
-                val content = sharedJson.decodeFromString<DatafileContent>(responseBodyString)
-                println("✅ Successfully parsed datafile content")
-                Result.success(content)
-            } catch (e: Throwable) {
-                println("❌ Failed to parse JSON: ${e.message}")
-                Result.failure(
-                    FeaturevisorError.UnparsableJson(
-                        responseBodyString,
-                        e.message ?: "Failed to parse JSON"
+                val content = json.decodeFromString<DatafileContent>(responseBodyString)
+                println("✅ Successfully parsed DatafileContent: ${content.features.size} features")
+                completion(Result.success(content))
+
+            } catch (throwable: Throwable) {
+                println("❌ JSON parsing failed: ${throwable.message}")
+                throwable.printStackTrace()
+
+                completion(
+                    Result.failure(
+                        FeaturevisorError.UnparsableJson(
+                            responseBodyString,
+                            response.status.description
+                        )
                     )
                 )
             }
         } else {
-            println("❌ HTTP error: ${response.status.value} ${response.status.description}")
-            Result.failure(
-                FeaturevisorError.FetchingDataFileFailed(
-                    "HTTP ${response.status.value}: ${response.status.description}"
+            println("❌ HTTP request failed: ${response.status}")
+
+            // Match original error handling - both cases used UnparsableJson
+            completion(
+                Result.failure(
+                    FeaturevisorError.UnparsableJson(
+                        responseBodyString,
+                        response.status.description
+                    )
                 )
             )
         }
-    } catch (e: Throwable) {
-        println("❌ Exception while fetching datafile: ${e.message}")
-        Result.failure(e)
+    } catch (e: Exception) {
+        println("❌ Response handling error: ${e}: ${e.message}")
+        e.printStackTrace()
+        completion(Result.failure(e))
     }
 }
