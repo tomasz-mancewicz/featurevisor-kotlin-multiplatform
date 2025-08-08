@@ -4,7 +4,6 @@ import com.featurevisor.types.DatafileContent
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.headers
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
@@ -51,7 +50,7 @@ internal fun FeaturevisorInstance.fetchDatafileContent(
             return
         }
 
-        debugLog("🚀 Using direct HTTP fetch (Ktor version)")
+        debugLog("🚀 Using direct HTTP fetch (clean Ktor version)")
         fetchDatafileContentFromUrl(url, completion, this.fetchCoroutineScope)
 
     } catch (e: Exception) {
@@ -68,7 +67,7 @@ private fun fetchDatafileContentFromUrl(
     println("🌐 Creating HTTP request for: $url")
 
     try {
-        // Validate URL format (equivalent to toHttpUrl() validation)
+        // Validate URL format
         Url(url)
         println("✅ URL validation passed")
 
@@ -78,64 +77,63 @@ private fun fetchDatafileContentFromUrl(
         return
     }
 
-    // Launch in the background, but use callback pattern like original
+    // Launch coroutine for HTTP request
     coroutineScope.launch {
+        println("🧵 Coroutine started for HTTP request")
+
+        // Create simple HTTP client WITHOUT any plugins
         val client = HttpClient()
+        println("🏭 Basic HTTP client created")
 
         try {
-            println("📤 Starting HTTP request...")
+            println("📤 Making GET request...")
 
             val response = client.get(url) {
                 headers {
-                    // IMPORTANT: Match original exactly - it used Content-Type, not Accept
                     append(HttpHeaders.ContentType, "application/json")
+                    println("📋 Added Content-Type header")
                 }
             }
 
-            println("📥 HTTP response received: ${response.status}")
+            println("📥 Response received: ${response.status}")
 
-            // Handle response (equivalent to onResponse callback)
-            handleResponse(response, completion)
+            // Get response body as text
+            val responseBodyString = response.bodyAsText()
+            println("📄 Response body received: ${responseBodyString.length} characters")
 
-        } catch (e: Exception) {
-            // Handle failure (equivalent to onFailure callback)
-            println("❌ HTTP request exception: ${e}: ${e.message}")
-            e.printStackTrace()
-            completion(Result.failure(e))
-        } finally {
-            client.close()
-            println("🔌 HTTP client closed")
-        }
-    }
-}
+            if (response.status.isSuccess()) {
+                println("✅ HTTP request successful, parsing JSON...")
 
-private suspend fun handleResponse(
-    response: HttpResponse,
-    completion: (Result<DatafileContent>) -> Unit
-) {
-    try {
-        val responseBodyString = response.bodyAsText()
-        println("📄 Response body length: ${responseBodyString.length}")
+                // Log response for debugging
+                FeaturevisorInstance.companionLogger?.debug(responseBodyString)
 
-        if (response.status.isSuccess()) {
-            println("✅ HTTP request successful, parsing response...")
+                try {
+                    // Parse JSON manually using kotlinx.serialization
+                    val json = Json {
+                        ignoreUnknownKeys = true
+                    }
+                    println("🔧 JSON parser configured")
 
-            // Create Json instance matching original configuration
-            val json = Json {
-                ignoreUnknownKeys = true
-            }
+                    val content = json.decodeFromString<DatafileContent>(responseBodyString)
+                    println("✅ Successfully parsed DatafileContent: ${content.features.size} features, revision ${content.revision}")
 
-            // Log response like original
-            FeaturevisorInstance.companionLogger?.debug(responseBodyString)
+                    completion(Result.success(content))
 
-            try {
-                val content = json.decodeFromString<DatafileContent>(responseBodyString)
-                println("✅ Successfully parsed DatafileContent: ${content.features.size} features")
-                completion(Result.success(content))
+                } catch (throwable: Throwable) {
+                    println("❌ JSON parsing failed: ${throwable}: ${throwable.message}")
+                    throwable.printStackTrace()
 
-            } catch (throwable: Throwable) {
-                println("❌ JSON parsing failed: ${throwable.message}")
-                throwable.printStackTrace()
+                    completion(
+                        Result.failure(
+                            FeaturevisorError.UnparsableJson(
+                                responseBodyString,
+                                throwable.message ?: "JSON parsing failed"
+                            )
+                        )
+                    )
+                }
+            } else {
+                println("❌ HTTP request failed: ${response.status}")
 
                 completion(
                     Result.failure(
@@ -146,22 +144,15 @@ private suspend fun handleResponse(
                     )
                 )
             }
-        } else {
-            println("❌ HTTP request failed: ${response.status}")
 
-            // Match original error handling - both cases used UnparsableJson
-            completion(
-                Result.failure(
-                    FeaturevisorError.UnparsableJson(
-                        responseBodyString,
-                        response.status.description
-                    )
-                )
-            )
+        } catch (e: Exception) {
+            println("❌ HTTP request exception: ${e}: ${e.message}")
+            e.printStackTrace()
+            completion(Result.failure(e))
+
+        } finally {
+            client.close()
+            println("🔌 HTTP client closed")
         }
-    } catch (e: Exception) {
-        println("❌ Response handling error: ${e}: ${e.message}")
-        e.printStackTrace()
-        completion(Result.failure(e))
     }
 }
