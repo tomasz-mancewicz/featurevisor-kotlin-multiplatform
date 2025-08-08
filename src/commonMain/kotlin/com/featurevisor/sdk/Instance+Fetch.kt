@@ -19,17 +19,45 @@ internal fun FeaturevisorInstance.fetchDatafileContent(
     handleDatafileFetch: DatafileFetchHandler? = null,
     completion: (Result<DatafileContent>) -> Unit,
 ) {
-    println("🔍 fetchDatafileContent called with URL: $url")
-
-    handleDatafileFetch?.let { handleFetch ->
-        println("📦 Using handleDatafileFetch override")
-        val result = handleFetch(url)
-        completion(result)
-        return
+    fun debugLog(message: String, data: Map<String, Any>? = null) {
+        logger?.debug(message, data ?: emptyMap())
+        println("Featurevisor.fetch: $message") // Fallback
     }
 
-    println("🚀 Using direct HTTP fetch (Ktor version matching original OkHttp)")
-    fetchDatafileContentFromUrl(url, completion, this.fetchCoroutineScope)
+    fun errorLog(message: String, error: Throwable? = null) {
+        logger?.error(message, if (error != null) mapOf("error" to error) else emptyMap())
+        println("Featurevisor.fetch ERROR: $message ${error?.message ?: ""}")
+    }
+
+    debugLog("🔍 fetchDatafileContent called", mapOf(
+        "url" to url,
+        "hasHandler" to (handleDatafileFetch != null)
+    ))
+
+    try {
+        handleDatafileFetch?.let { handleFetch ->
+            debugLog("📦 Using handleDatafileFetch override")
+            try {
+                val result = handleFetch(url)
+                debugLog("📦 handleDatafileFetch returned", mapOf("success" to result.isSuccess))
+                if (result.isFailure) {
+                    errorLog("📦 handleDatafileFetch error", result.exceptionOrNull())
+                }
+                completion(result)
+            } catch (e: Exception) {
+                errorLog("📦 handleDatafileFetch threw exception", e)
+                completion(Result.failure(e))
+            }
+            return
+        }
+
+        debugLog("🚀 Using direct HTTP fetch (Ktor version)")
+        fetchDatafileContentFromUrl(url, completion, this.fetchCoroutineScope)
+
+    } catch (e: Exception) {
+        errorLog("❌ Exception in fetchDatafileContent", e)
+        completion(Result.failure(e))
+    }
 }
 
 private fun fetchDatafileContentFromUrl(

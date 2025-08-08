@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlin.native.concurrent.ThreadLocal
 
 typealias ConfigureBucketKey = (Feature, Context, BucketKey) -> BucketKey
 typealias ConfigureBucketValue = (Feature, Context, BucketValue) -> BucketValue
@@ -68,85 +69,178 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
     internal var refreshJob: Job? = null
 
     init {
+        // Create a debug logging function that always outputs
+        fun debugLog(message: String, data: Map<String, Any>? = null) {
+            // Always print to console for debugging
+            println("🔧 Featurevisor: $message")
+
+            // Also try the logger if available
+            try {
+                logger?.debug(message, data ?: emptyMap())
+            } catch (e: Exception) {
+                println("🔧 Logger failed: ${e.message}")
+            }
+        }
+
+        fun errorLog(message: String, error: Throwable? = null, data: Map<String, Any>? = null) {
+            // Always print to console for debugging
+            println("🚨 Featurevisor ERROR: $message ${error?.message ?: ""}")
+            error?.printStackTrace()
+
+            // Also try the logger if available
+            try {
+                logger?.error(message, (data ?: emptyMap()) + if (error != null) mapOf("error" to error) else emptyMap())
+            } catch (e: Exception) {
+                println("🚨 Logger failed: ${e.message}")
+            }
+        }
+
+        debugLog("🏗️ FeaturevisorInstance init started")
+
         with(options) {
-            companionLogger = logger
-            if (onReady != null) {
-                emitter.addListener(event = READY, listener = onReady)
-            }
+            try {
+                debugLog("🏗️ Setting up companion logger")
+                companionLogger = logger
 
-            if (onRefresh != null) {
-                emitter.addListener(REFRESH, onRefresh)
-            }
-            if (onUpdate != null) {
-                emitter.addListener(UPDATE, onUpdate)
-            }
-            if (onActivation != null) {
-                emitter.addListener(ACTIVATION, onActivation)
-            }
-            if (onError != null) {
-                emitter.addListener(ERROR, onError)
-            }
-
-            on = emitter::addListener
-            off = emitter::removeListener
-            addListener = emitter::addListener
-            removeListener = emitter::removeListener
-            removeAllListeners = emitter::removeAllListeners
-
-            when {
-                datafile != null -> {
-                    datafileReader = DatafileReader(datafile)
-                    statuses.ready = true
-                    emitter.emit(READY, datafile)
-                    println("FeaturevisorInstance datafile != null")
+                debugLog("🏗️ Setting up event listeners...")
+                if (onReady != null) {
+                    debugLog("   - Adding READY listener")
+                    emitter.addListener(event = READY, listener = onReady)
                 }
 
-                datafileUrl != null -> {
-                    println("FeaturevisorInstance datafileUrl != null before datafilereader")
-                    datafileReader = DatafileReader(options.datafile ?: emptyDatafile)
+                if (onRefresh != null) {
+                    debugLog("   - Adding REFRESH listener")
+                    emitter.addListener(REFRESH, onRefresh)
+                }
+                if (onUpdate != null) {
+                    debugLog("   - Adding UPDATE listener")
+                    emitter.addListener(UPDATE, onUpdate)
+                }
+                if (onActivation != null) {
+                    debugLog("   - Adding ACTIVATION listener")
+                    emitter.addListener(ACTIVATION, onActivation)
+                }
+                if (onError != null) {
+                    debugLog("   - Adding ERROR listener")
+                    emitter.addListener(ERROR, onError)
+                }
 
-                    // Launch coroutine for fetching datafile
-                    fetchCoroutineScope.launch {
-                        println("🚀 Starting datafile fetch in coroutine...")
+                debugLog("🏗️ Setting up emitter functions")
+                on = emitter::addListener
+                off = emitter::removeListener
+                addListener = emitter::addListener
+                removeListener = emitter::removeListener
+                removeAllListeners = emitter::removeAllListeners
 
-                        fetchDatafileContent(datafileUrl, handleDatafileFetch) { result ->
-                            println("📋 Fetch callback received: success=${result.isSuccess}")
+                debugLog("🏗️ Checking initialization options", mapOf(
+                    "hasDatafile" to (datafile != null),
+                    "datafileUrl" to (datafileUrl ?: "NULL"),
+                    "hasCustomScope" to (options.coroutineScope != null)
+                ))
 
-                            if (result.isSuccess) {
-                                try {
-                                    val datafileContent = result.getOrThrow()
-                                    println("✅ Datafile received: ${datafileContent.features.size} features, revision ${datafileContent.revision}")
+                when {
+                    datafile != null -> {
+                        debugLog("🏗️ Using provided datafile")
+                        datafileReader = DatafileReader(datafile)
+                        statuses.ready = true
+                        emitter.emit(READY, datafile)
+                        debugLog("✅ FeaturevisorInstance static datafile initialization completed")
+                    }
 
-                                    datafileReader = DatafileReader(datafileContent)
-                                    statuses.ready = true
+                    datafileUrl != null -> {
+                        debugLog("🏗️ Using datafile URL", mapOf("url" to datafileUrl))
+                        debugLog("🏗️ Creating empty DatafileReader...")
 
-                                    println("📤 Emitting READY event with datafile content")
-                                    emitter.emit(READY, datafileContent)
-
-                                    if (refreshInterval != null) {
-                                        println("🔄 Starting auto-refresh")
-                                        startRefreshing()
-                                    }
-                                } catch (e: Exception) {
-                                    println("❌ Error processing successful fetch result: ${e.message}")
-                                    e.printStackTrace()
-                                    logger?.error("Error processing datafile: ${e.message}")
-                                    emitter.emit(ERROR, e) // Pass the actual error!
-                                }
-                            } else {
-                                val exception = result.exceptionOrNull()
-                                println("❌ Fetch failed: $exception - ${exception?.message}")
-
-                                logger?.error("Failed to fetch datafile: $result")
-
-                                // FIXED: Pass the actual exception to ERROR event
-                                emitter.emit(ERROR, exception ?: Exception("Unknown fetch failure"))
-                            }
+                        try {
+                            datafileReader = DatafileReader(options.datafile ?: emptyDatafile)
+                            debugLog("✅ DatafileReader created successfully")
+                        } catch (e: Exception) {
+                            errorLog("❌ DatafileReader creation failed", e)
+                            throw e
                         }
+
+                        debugLog("🏗️ Launching coroutine for datafile fetch...")
+
+                        try {
+                            fetchCoroutineScope.launch {
+                                debugLog("🚀 Starting datafile fetch in coroutine...")
+
+                                try {
+                                    debugLog("🔍 About to call fetchDatafileContent...", mapOf(
+                                        "url" to datafileUrl,
+                                        "hasHandler" to (handleDatafileFetch != null)
+                                    ))
+
+                                    fetchDatafileContent(datafileUrl, handleDatafileFetch) { result ->
+                                        debugLog("📋 Fetch callback received", mapOf("success" to result.isSuccess))
+
+                                        if (result.isSuccess) {
+                                            try {
+                                                val datafileContent = result.getOrThrow()
+                                                debugLog("✅ Datafile received", mapOf(
+                                                    "featuresCount" to datafileContent.features.size,
+                                                    "revision" to datafileContent.revision
+                                                ))
+
+                                                datafileReader = DatafileReader(datafileContent)
+                                                statuses.ready = true
+
+                                                debugLog("📤 Emitting READY event with datafile content")
+                                                emitter.emit(READY, datafileContent)
+
+                                                if (refreshInterval != null) {
+                                                    debugLog("🔄 Starting auto-refresh")
+                                                    startRefreshing()
+                                                }
+                                            } catch (e: Exception) {
+                                                errorLog("❌ Error processing successful fetch result", e)
+                                                emitter.emit(ERROR, e)
+                                            }
+                                        } else {
+                                            val exception = result.exceptionOrNull()
+                                            errorLog("❌ Fetch failed", exception, mapOf(
+                                                "exceptionType" to (exception ?: "Unknown")
+                                            ))
+
+                                            emitter.emit(ERROR, exception ?: Exception("Unknown fetch failure"))
+                                        }
+                                    }
+
+                                    debugLog("✅ fetchDatafileContent call completed")
+
+                                } catch (e: Exception) {
+                                    errorLog("❌ Exception in coroutine during fetch", e)
+                                    emitter.emit(ERROR, e)
+                                }
+                            }
+
+                            debugLog("✅ Coroutine launched successfully")
+
+                        } catch (e: Exception) {
+                            errorLog("❌ Failed to launch coroutine", e)
+                            emitter.emit(ERROR, e)
+                        }
+                    }
+
+                    else -> {
+                        errorLog("❌ No datafile or datafileUrl provided")
+                        throw MissingDatafileOptions
                     }
                 }
 
-                else -> throw MissingDatafileOptions
+                debugLog("✅ FeaturevisorInstance init completed successfully")
+
+            } catch (e: Exception) {
+                errorLog("❌ FeaturevisorInstance init failed", e)
+
+                // Make sure to emit the error so the callback gets it
+                try {
+                    emitter.emit(ERROR, e)
+                } catch (emitError: Exception) {
+                    errorLog("❌ Failed to emit error", emitError)
+                }
+
+                throw e
             }
         }
     }
