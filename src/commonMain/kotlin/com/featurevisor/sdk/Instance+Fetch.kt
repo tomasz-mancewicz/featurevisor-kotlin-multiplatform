@@ -10,7 +10,10 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.http.*
 import kotlinx.coroutines.launch
 
-private val sharedJson = Json { ignoreUnknownKeys = true }
+private val sharedJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+}
 
 // MARK: - Fetch datafile content
 internal fun FeaturevisorInstance.fetchDatafileContent(

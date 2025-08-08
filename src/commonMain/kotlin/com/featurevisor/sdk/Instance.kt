@@ -106,9 +106,11 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
                     datafileReader = DatafileReader(datafile)
                     statuses.ready = true
                     emitter.emit(READY)
+                    println("FeaturevisorInstance datafile != null")
                 }
 
                 datafileUrl != null -> {
+                    println("FeaturevisorInstance datafileUrl != null before datafilereader")
                     datafileReader = DatafileReader(options.datafile ?: emptyDatafile)
 
                     // Launch coroutine for fetching datafile
