@@ -66,6 +66,7 @@ kotlin {
             // Ktor for HTTP client (multiplatform)
             implementation("io.ktor:ktor-client-core:3.1.3")
             implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
+            implementation("io.ktor:ktor-client-json:3.1.3")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
         }
 
