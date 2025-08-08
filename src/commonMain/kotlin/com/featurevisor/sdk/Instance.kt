@@ -75,24 +75,16 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
             }
 
             if (onRefresh != null) {
-                emitter.addListener(
-                    REFRESH, onRefresh
-                )
+                emitter.addListener(REFRESH, onRefresh)
             }
             if (onUpdate != null) {
-                emitter.addListener(
-                    UPDATE, onUpdate
-                )
+                emitter.addListener(UPDATE, onUpdate)
             }
             if (onActivation != null) {
-                emitter.addListener(
-                    ACTIVATION, onActivation
-                )
+                emitter.addListener(ACTIVATION, onActivation)
             }
             if (onError != null) {
-                emitter.addListener(
-                    ERROR, onError
-                )
+                emitter.addListener(ERROR, onError)
             }
 
             on = emitter::addListener
@@ -105,7 +97,7 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
                 datafile != null -> {
                     datafileReader = DatafileReader(datafile)
                     statuses.ready = true
-                    emitter.emit(READY)
+                    emitter.emit(READY, datafile)
                     println("FeaturevisorInstance datafile != null")
                 }
 
@@ -115,15 +107,40 @@ class FeaturevisorInstance private constructor(options: InstanceOptions) {
 
                     // Launch coroutine for fetching datafile
                     fetchCoroutineScope.launch {
+                        println("🚀 Starting datafile fetch in coroutine...")
+
                         fetchDatafileContent(datafileUrl, handleDatafileFetch) { result ->
+                            println("📋 Fetch callback received: success=${result.isSuccess}")
+
                             if (result.isSuccess) {
-                                datafileReader = DatafileReader(result.getOrThrow())
-                                statuses.ready = true
-                                emitter.emit(READY, result.getOrThrow())
-                                if (refreshInterval != null) startRefreshing()
+                                try {
+                                    val datafileContent = result.getOrThrow()
+                                    println("✅ Datafile received: ${datafileContent.features.size} features, revision ${datafileContent.revision}")
+
+                                    datafileReader = DatafileReader(datafileContent)
+                                    statuses.ready = true
+
+                                    println("📤 Emitting READY event with datafile content")
+                                    emitter.emit(READY, datafileContent)
+
+                                    if (refreshInterval != null) {
+                                        println("🔄 Starting auto-refresh")
+                                        startRefreshing()
+                                    }
+                                } catch (e: Exception) {
+                                    println("❌ Error processing successful fetch result: ${e.message}")
+                                    e.printStackTrace()
+                                    logger?.error("Error processing datafile: ${e.message}")
+                                    emitter.emit(ERROR, e) // Pass the actual error!
+                                }
                             } else {
+                                val exception = result.exceptionOrNull()
+                                println("❌ Fetch failed: $exception - ${exception?.message}")
+
                                 logger?.error("Failed to fetch datafile: $result")
-                                emitter.emit(ERROR)
+
+                                // FIXED: Pass the actual exception to ERROR event
+                                emitter.emit(ERROR, exception ?: Exception("Unknown fetch failure"))
                             }
                         }
                     }

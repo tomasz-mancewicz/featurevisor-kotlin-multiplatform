@@ -59,9 +59,9 @@ kotlin {
             implementation("com.goncalossilva:murmurhash:0.4.1")
             implementation("net.swiftzer.semver:semver:2.1.0")
             // Ktor for HTTP client (multiplatform)
-            implementation("io.ktor:ktor-client-core:2.3.7")
-            implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+            implementation("io.ktor:ktor-client-core:3.1.3")
+            implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
         }
 
         commonTest.dependencies {
@@ -73,7 +73,7 @@ kotlin {
 
         jvmMain.dependencies {
             // Ktor JVM engine
-            implementation("io.ktor:ktor-client-okhttp:2.3.7")
+            implementation("io.ktor:ktor-client-okhttp:3.1.3")
             // Test runner dependencies (JVM-only)
             implementation("org.yaml:snakeyaml:2.2")
             implementation("com.google.code.gson:gson:2.10.1")
@@ -87,12 +87,12 @@ kotlin {
 
         androidMain.dependencies {
             // Ktor Android engine
-            implementation("io.ktor:ktor-client-okhttp:2.3.7")
+            implementation("io.ktor:ktor-client-okhttp:3.1.3")
         }
 
         if (isMacosX64 || isMacosArm64) {
             iosMain.dependencies {
-                implementation("io.ktor:ktor-client-darwin:2.3.7")
+                implementation("io.ktor:ktor-client-darwin:3.1.3")
             }
         }
     }
