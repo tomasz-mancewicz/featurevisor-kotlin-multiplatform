@@ -16,9 +16,10 @@ import com.featurevisor.types.TestSegment
 import com.featurevisor.types.VariableValue
 import com.featurevisor.types.WeightType
 import com.google.gson.Gson
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import org.yaml.snakeyaml.Yaml
 import java.io.File
+import kotlin.time.ExperimentalTime
 
 internal fun parseTestFeatureAssertions(yamlFilePath: String) =
     try {
@@ -77,6 +78,7 @@ internal fun parseTestFeatureAssertions(yamlFilePath: String) =
         null
     }
 
+@OptIn(ExperimentalTime::class)
 private fun mapMatrixValues(value: Any) =
     when(value){
         is Boolean -> {
@@ -140,6 +142,7 @@ private fun parseVariableValue(value: Any?): VariableValue {
     }
 }
 
+@OptIn(ExperimentalTime::class)
 private fun parseAttributeValue(value: Any?): AttributeValue {
     if (value == null) {
         return AttributeValue.StringValue(null)

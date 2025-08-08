@@ -3,7 +3,7 @@ package com.featurevisor.types
 import com.featurevisor.sdk.serializers.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.datetime.Instant
+import kotlin.time.ExperimentalTime
 
 typealias Context = Map<AttributeKey, AttributeValue>
 typealias VariationValue = String
@@ -171,7 +171,8 @@ sealed class AttributeValue {
     data class IntValue(val value: Int) : AttributeValue()
     data class DoubleValue(val value: Double) : AttributeValue()
     data class BooleanValue(val value: Boolean) : AttributeValue()
-    data class DateValue(val value: Instant) : AttributeValue()
+    @OptIn(ExperimentalTime::class)
+    data class DateValue(val value: kotlin.time.Instant) : AttributeValue()
 }
 
 @Serializable(with = ConditionSerializer::class)
@@ -196,7 +197,8 @@ sealed class ConditionValue {
     data class DoubleValue(val value: Double) : ConditionValue()
     data class BooleanValue(val value: Boolean) : ConditionValue()
     data class ArrayValue(val values: List<String>) : ConditionValue()
-    data class DateTimeValue(val value: Instant) : ConditionValue() // Changed from Date to Instant
+    @OptIn(ExperimentalTime::class)
+    data class DateTimeValue(val value: kotlin.time.Instant) : ConditionValue() // Changed from Date to Instant
 }
 
 typealias SegmentKey = String

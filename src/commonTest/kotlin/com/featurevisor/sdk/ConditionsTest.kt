@@ -5,9 +5,11 @@ import com.featurevisor.types.Condition
 import com.featurevisor.types.ConditionValue
 import com.featurevisor.types.Operator.*
 import io.kotest.matchers.shouldBe
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class ConditionsTest {
 
     @Test

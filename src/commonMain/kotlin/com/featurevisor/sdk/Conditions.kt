@@ -29,7 +29,9 @@ import com.featurevisor.types.Operator.SEMVER_LESS_THAN_OR_EQUALS
 import com.featurevisor.types.Operator.SEMVER_NOT_EQUALS
 import com.featurevisor.types.Operator.STARTS_WITH
 import net.swiftzer.semver.SemVer
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 object Conditions {
 
     fun conditionIsMatched(condition: Plain, context: Context): Boolean {

@@ -23,7 +23,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.datetime.Instant
+import kotlin.time.ExperimentalTime
 
 @OptIn(InternalSerializationApi::class, ExperimentalSerializationApi::class)
 @Serializer(forClass = Required::class)
@@ -242,7 +242,7 @@ object BucketBySerializer : KSerializer<BucketBy> {
     }
 }
 
-@OptIn(InternalSerializationApi::class)
+@OptIn(InternalSerializationApi::class, ExperimentalTime::class)
 object ConditionValueSerializer : KSerializer<ConditionValue> {
     override val descriptor: SerialDescriptor =
         buildSerialDescriptor("package.ConditionValue", PolymorphicKind.SEALED)
@@ -261,7 +261,7 @@ object ConditionValueSerializer : KSerializer<ConditionValue> {
                 } ?: tree.content.let {
                     try {
                         // Try to parse as ISO-8601 datetime string
-                        val instant = Instant.parse(it)
+                        val instant = kotlin.time.Instant.parse(it)
                         ConditionValue.DateTimeValue(instant)
                     } catch (e: Exception) {
                         ConditionValue.StringValue(it)

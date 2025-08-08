@@ -8,11 +8,12 @@ import com.featurevisor.types.DatafileContent
 import com.featurevisor.types.FeatureAssertion
 import com.featurevisor.types.TestResult
 import com.featurevisor.types.WeightType
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import java.io.File
 import kotlin.math.abs
+import kotlin.time.ExperimentalTime
 
 internal const val tick = "\u2713"
 internal const val cross = "\u2717"
@@ -158,6 +159,7 @@ internal fun printTestResult(testResult: TestResult) {
     }
 }
 
+@OptIn(ExperimentalTime::class)
 fun getContextValue(contextValue: Any?) =
     when (contextValue) {
         is Boolean -> AttributeValue.BooleanValue(contextValue)
@@ -177,6 +179,7 @@ fun getContextValue(contextValue: Any?) =
         else -> throw Exception("Unsupported context value")
     }
 
+@OptIn(ExperimentalTime::class)
 fun getContextValues(contextValue: AttributeValue?) =
     when (contextValue) {
         is AttributeValue.IntValue -> contextValue.value
