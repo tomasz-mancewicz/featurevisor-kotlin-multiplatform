@@ -47,8 +47,8 @@ internal fun printBoldMessage(message: String) = println("\u001b[1m$message\u001
 
 internal fun getSdkInstance(datafileContent: DatafileContent?, assertion: FeatureAssertion) =
     FeaturevisorInstance.createInstance(
-        InstanceOptions(
-            datafile = datafileContent,
+        datafile = datafileContent,
+        options = InstanceOptions(
             configureBucketValue = { _, _, _ ->
                 when (assertion.at) {
                     is WeightType.IntType -> ((assertion.at as WeightType.IntType).value * (MAX_BUCKETED_NUMBER / 100))
@@ -61,9 +61,8 @@ internal fun getSdkInstance(datafileContent: DatafileContent?, assertion: Featur
 
 internal fun initializeSdkWithDataFileContent(datafileContent: DatafileContent?) =
     FeaturevisorInstance.createInstance(
-        InstanceOptions(
-            datafile = datafileContent,
-        )
+        datafile = datafileContent,
+        options = InstanceOptions()
     )
 
 internal fun getFileForSpecificPath(path: String) = File(path)

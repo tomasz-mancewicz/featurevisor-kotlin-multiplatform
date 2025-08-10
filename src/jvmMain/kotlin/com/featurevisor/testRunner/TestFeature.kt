@@ -61,14 +61,7 @@ fun testFeature(
                 val sdk = getSdkInstance(datafileContent, it)
 
                 if (option.verbose) {
-                    sdk.setLogLevels(
-                        listOf(
-                            Logger.LogLevel.DEBUG,
-                            Logger.LogLevel.INFO,
-                            Logger.LogLevel.WARN,
-                            Logger.LogLevel.ERROR
-                        )
-                    )
+                    sdk.setLogLevel(Logger.LogLevel.DEBUG)
                 }
 
                 if (testFeature.key.isEmpty()) {

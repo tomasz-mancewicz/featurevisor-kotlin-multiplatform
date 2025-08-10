@@ -100,9 +100,8 @@ fun FeaturevisorInstance.evaluateVariation(featureKey: FeatureKey, context: Cont
             return evaluation
         }
 
-        // initial
-        if (statuses.ready.not() && initialFeatures?.get(featureKey)?.variation != null) {
-            val variationValue = initialFeatures[featureKey]?.variation
+        // initial features (always available, not dependent on ready state)
+        initialFeatures?.get(featureKey)?.variation?.let { variationValue ->
             evaluation = Evaluation(
                 featureKey = featureKey,
                 reason = INITIAL,
@@ -216,7 +215,7 @@ fun FeaturevisorInstance.evaluateVariation(featureKey: FeatureKey, context: Cont
         logger?.debug("no matched variation", evaluation.toDictionary())
 
         return evaluation
-    }catch (e:Exception){
+    } catch (e: Exception) {
         evaluation = Evaluation(
             featureKey = featureKey,
             reason = ERROR,
@@ -227,7 +226,6 @@ fun FeaturevisorInstance.evaluateVariation(featureKey: FeatureKey, context: Cont
         return evaluation
     }
 }
-
 
 @Suppress("UNREACHABLE_CODE")
 fun FeaturevisorInstance.evaluateFlag(featureKey: FeatureKey, context: Context = emptyMap()): Evaluation {
@@ -251,13 +249,12 @@ fun FeaturevisorInstance.evaluateFlag(featureKey: FeatureKey, context: Context =
             return evaluation
         }
 
-        // initial
-        if (statuses.ready && initialFeatures?.get(featureKey) != null) {
-            val initialFeature = initialFeatures[featureKey]
+        // initial features (always available, not dependent on ready state)
+        initialFeatures?.get(featureKey)?.let { initialFeature ->
             evaluation = Evaluation(
                 featureKey = featureKey,
                 reason = INITIAL,
-                enabled = initialFeature?.enabled,
+                enabled = initialFeature.enabled,
                 initial = initialFeature
             )
 
@@ -323,7 +320,7 @@ fun FeaturevisorInstance.evaluateFlag(featureKey: FeatureKey, context: Context =
                     return@all false
                 }
 
-                if (requiredVariation != null){
+                if (requiredVariation != null) {
                     val requiredVariationValue = getVariation(requiredKey, finalContext)
 
                     return@all requiredVariationValue == requiredVariation
@@ -471,9 +468,8 @@ fun FeaturevisorInstance.evaluateVariable(
             return evaluation
         }
 
-        // initial
-        if (!statuses.ready && initialFeatures?.get(featureKey)?.variables?.get(variableKey) != null) {
-            val variableValue = initialFeatures[featureKey]?.variables?.get(variableKey)
+        // initial features (always available, not dependent on ready state)
+        initialFeatures?.get(featureKey)?.variables?.get(variableKey)?.let { variableValue ->
             evaluation = Evaluation(
                 featureKey = featureKey,
                 reason = INITIAL,
@@ -515,7 +511,7 @@ fun FeaturevisorInstance.evaluateVariable(
             val finalContext = interceptContext?.invoke(context) ?: context
 
             // forced
-            val force =   findForceFromFeature(feature, context, datafileReader)
+            val force = findForceFromFeature(feature, context, datafileReader)
 
             force?.let {
                 if (it.variables?.containsKey(variableKey) == true) {
@@ -638,7 +634,7 @@ fun FeaturevisorInstance.evaluateVariable(
             logger?.debug("using default value", evaluation.toDictionary())
             return evaluation
         }
-    } catch (e: Exception){
+    } catch (e: Exception) {
         evaluation = Evaluation(
             featureKey = featureKey,
             reason = ERROR,
@@ -648,8 +644,6 @@ fun FeaturevisorInstance.evaluateVariable(
 
         return evaluation
     }
-
-
 }
 
 private fun FeaturevisorInstance.getBucketKey(feature: Feature, context: Context): BucketKey {

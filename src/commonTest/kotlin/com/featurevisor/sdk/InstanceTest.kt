@@ -22,7 +22,6 @@ import kotlin.test.Test
 
 @OptIn(ExperimentalAtomicApi::class)
 class InstanceTest {
-    private val datafileUrl = "https://www.testmock.com"
 
     private val datafileContent = DatafileContent(
         schemaVersion = "0",
@@ -33,74 +32,114 @@ class InstanceTest {
     )
 
     @Test
-    fun `instance initialised properly`() {
+    fun `instance initialised properly with datafile`() {
         val instanceOptions = InstanceOptions(
             bucketKeySeparator = "",
             configureBucketKey = null,
             configureBucketValue = null,
-            datafile = datafileContent,
-            datafileUrl = null,
-            handleDatafileFetch = null,
             initialFeatures = mapOf(),
             interceptContext = null,
             logger = null,
-            onActivation = {},
-            onReady = {},
             onRefresh = {},
-            onUpdate = {},
-            refreshInterval = null,
+            onActivation = {},
             stickyFeatures = mapOf(),
-            onError = {},
         )
 
-        val systemUnderTest = FeaturevisorInstance.createInstance(options = instanceOptions)
-        systemUnderTest.statuses.ready shouldBe true
+        val systemUnderTest = FeaturevisorInstance.createInstance(
+            datafile = datafileContent,
+            options = instanceOptions
+        )
+
+        // Should be ready immediately with datafile
+        systemUnderTest.getRevision() shouldBe "0"
     }
 
     @Test
-    fun `instance fetches data using handleDatafileFetch`() = runTest {
-        val readyCallbackTriggered = AtomicBoolean(false)
+    fun `instance starts empty and accepts datafile later`() {
+        val systemUnderTest = FeaturevisorInstance.createInstance()
 
-        val mockHandler: DatafileFetchHandler = mock<DatafileFetchHandlerTest> {
-            every { invoke(datafileUrl) } returns Result.success(datafileContent)
+        // Should start with empty datafile
+        systemUnderTest.getRevision() shouldBe "empty"
+
+        // Update with new datafile
+        systemUnderTest.setDatafile(datafileContent)
+
+        // Should now have new revision
+        systemUnderTest.getRevision() shouldBe "0"
+    }
+
+    @Test
+    fun `instance accepts datafile from JSON string`() {
+        val systemUnderTest = FeaturevisorInstance.createInstance()
+
+        val datafileJson = """
+        {
+            "schemaVersion": "1",
+            "revision": "test-revision",
+            "attributes": [],
+            "segments": [],
+            "features": []
         }
+        """.trimIndent()
+
+        systemUnderTest.setDatafile(datafileJson)
+
+        systemUnderTest.getRevision() shouldBe "test-revision"
+    }
+
+    @Test
+    fun `refresh callback is triggered when datafile is updated`() = runTest {
+        var refreshCallbackTriggered = false
+        var receivedDatafile: DatafileContent? = null
 
         val instanceOptions = InstanceOptions(
-            bucketKeySeparator = "",
-            configureBucketKey = null,
-            configureBucketValue = null,
-            datafile = null,
-            datafileUrl = datafileUrl,
-            handleDatafileFetch = mockHandler,
-            initialFeatures = mapOf(),
-            interceptContext = null,
-            logger = null,
-            onActivation = {},
-            onReady = {
-                readyCallbackTriggered.store(true)
-            },
-            onRefresh = {},
-            onUpdate = {},
-            onError = {},
-            refreshInterval = null,
-            stickyFeatures = mapOf(),
+            onRefresh = { args ->
+                refreshCallbackTriggered = true
+                receivedDatafile = args[0] as DatafileContent
+            }
         )
 
-        val instance = FeaturevisorInstance.createInstance(options = instanceOptions)
+        val systemUnderTest = FeaturevisorInstance.createInstance(
+            options = instanceOptions
+        )
 
-        // Wait for the callback to be triggered with timeout
-        withTimeout(5000) { // 5 second timeout
-            while (!readyCallbackTriggered.load()) {
-                delay(50) // Check every 50ms
-            }
-        }
+        // Update datafile should trigger refresh callback
+        systemUnderTest.setDatafile(datafileContent)
 
-        // Verify the mock was called
-        verify(exactly(1)) {
-            mockHandler.invoke(datafileUrl)
-        }
+        refreshCallbackTriggered shouldBe true
+        receivedDatafile shouldBe datafileContent
+    }
 
-        readyCallbackTriggered.load() shouldBe true
-        instance.statuses.ready shouldBe true
+    @Test
+    fun `instance can be created with logger`() {
+        val logger = Logger.createLogger(Logger.LogLevel.DEBUG)
+
+        val instanceOptions = InstanceOptions(
+            logger = logger
+        )
+
+        val systemUnderTest = FeaturevisorInstance.createInstance(
+            datafile = datafileContent,
+            options = instanceOptions
+        )
+
+        systemUnderTest.getRevision() shouldBe "0"
+    }
+
+    @Test
+    fun `sticky features can be set and updated`() {
+        val systemUnderTest = FeaturevisorInstance.createInstance()
+
+        val stickyFeatures = mapOf(
+            "test_feature" to com.featurevisor.types.OverrideFeature(
+                enabled = true,
+                variation = "treatment"
+            )
+        )
+
+        systemUnderTest.setStickyFeatures(stickyFeatures)
+
+        // Verify it doesn't crash (internal state is private)
+        systemUnderTest.getRevision() shouldBe "empty"
     }
 }

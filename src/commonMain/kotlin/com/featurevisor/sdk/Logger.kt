@@ -9,53 +9,54 @@ typealias LogDetails = Map<String, Any>
 typealias LogHandler = (level: Logger.LogLevel, message: String, details: LogDetails?) -> Unit
 
 class Logger(
-    private var levels: List<LogLevel>,
+    private var logLevel: LogLevel,
     private val handle: LogHandler,
 ) {
     companion object {
-        private val defaultLogLevels: List<LogLevel> = listOf(ERROR, WARN)
+        private val defaultLogLevel = LogLevel.WARN
         private val defaultLogHandler: LogHandler = { level, message, _ ->
             println("[${level.value}] $message")
         }
 
         fun createLogger(
-            levels: List<LogLevel> = defaultLogLevels,
+            level: LogLevel = defaultLogLevel,
             handle: LogHandler = defaultLogHandler,
         ): Logger {
-            return Logger(levels, handle)
+            return Logger(level, handle)
         }
     }
 
-    fun setLevels(levels: List<LogLevel>) {
-        this.levels = levels
+    fun setLevel(level: LogLevel) {
+        this.logLevel = level
     }
 
     fun debug(message: String, details: LogDetails? = null) {
-        log(DEBUG, message, details)
+        log(LogLevel.DEBUG, message, details)
     }
 
     fun info(message: String, details: LogDetails? = null) {
-        log(INFO, message, details)
+        log(LogLevel.INFO, message, details)
     }
 
     fun warn(message: String, details: LogDetails? = null) {
-        log(WARN, message, details)
+        log(LogLevel.WARN, message, details)
     }
 
     fun error(message: String, details: LogDetails? = null) {
-        log(ERROR, message, details)
+        log(LogLevel.ERROR, message, details)
     }
 
     private fun log(level: LogLevel, message: String, details: LogDetails? = null) {
-        if (level in levels) {
+        if (level.priority >= logLevel.priority) {
             handle(level, message, details)
         }
     }
 
-    enum class LogLevel(val value: String) {
-        ERROR("error"),
-        WARN("warn"),
-        INFO("info"),
-        DEBUG("debug"),
+    enum class LogLevel(val value: String, val priority: Int) {
+        DEBUG("debug", 1),
+        INFO("info", 2),
+        WARN("warn", 3),
+        ERROR("error", 4),
+        NONE("none", 5); // Special level to disable all logging
     }
 }

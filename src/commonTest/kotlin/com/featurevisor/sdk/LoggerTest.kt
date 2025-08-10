@@ -1,9 +1,6 @@
 package com.featurevisor.sdk
 
-import com.featurevisor.sdk.Logger.LogLevel.DEBUG
-import com.featurevisor.sdk.Logger.LogLevel.ERROR
-import com.featurevisor.sdk.Logger.LogLevel.INFO
-import com.featurevisor.sdk.Logger.LogLevel.WARN
+import com.featurevisor.sdk.Logger.LogLevel.*
 import dev.mokkery.answering.returns
 import dev.mokkery.every
 import dev.mokkery.matcher.any
@@ -20,18 +17,14 @@ class LoggerTest {
         every { invoke(any(), any(), any()) } returns Unit
     }
 
-    private val systemUnderTest: Logger = Logger.createLogger(
-        handle = mockLogHandler,
-    )
-
     @Test
-    fun `log DEBUG message when level DEBUG is set`() {
-        systemUnderTest.setLevels(listOf(DEBUG))
-
-        systemUnderTest.debug(
-            message = mockLogMessage,
-            details = mockLogDetails,
+    fun `log DEBUG message when level DEBUG is set (hierarchical)`() {
+        val systemUnderTest = Logger.createLogger(
+            level = DEBUG,
+            handle = mockLogHandler,
         )
+
+        systemUnderTest.debug(mockLogMessage, mockLogDetails)
 
         verify(exactly(1)) {
             mockLogHandler.invoke(DEBUG, mockLogMessage, mockLogDetails)
@@ -39,13 +32,13 @@ class LoggerTest {
     }
 
     @Test
-    fun `log INFO message when level INFO is set`() {
-        systemUnderTest.setLevels(listOf(INFO))
-
-        systemUnderTest.info(
-            message = mockLogMessage,
-            details = mockLogDetails,
+    fun `log INFO message when level DEBUG is set (hierarchical)`() {
+        val systemUnderTest = Logger.createLogger(
+            level = DEBUG, // DEBUG includes INFO
+            handle = mockLogHandler,
         )
+
+        systemUnderTest.info(mockLogMessage, mockLogDetails)
 
         verify(exactly(1)) {
             mockLogHandler.invoke(INFO, mockLogMessage, mockLogDetails)
@@ -53,59 +46,106 @@ class LoggerTest {
     }
 
     @Test
-    fun `log WARN message when level WARN is set`() {
-        systemUnderTest.setLevels(listOf(WARN))
-
-        systemUnderTest.warn(
-            message = mockLogMessage,
-            details = mockLogDetails,
+    fun `do not log DEBUG when level INFO is set`() {
+        val systemUnderTest = Logger.createLogger(
+            level = INFO, // INFO does not include DEBUG
+            handle = mockLogHandler,
         )
 
-        verify(exactly(1)) {
-            mockLogHandler.invoke(WARN, mockLogMessage, mockLogDetails)
+        systemUnderTest.debug(mockLogMessage, mockLogDetails)
+
+        verify(exactly(0)) {
+            mockLogHandler.invoke(DEBUG, any(), any())
         }
     }
 
     @Test
-    fun `log ERROR message when level ERROR is set`() {
-        systemUnderTest.setLevels(listOf(ERROR))
-
-        systemUnderTest.error(
-            message = mockLogMessage,
-            details = mockLogDetails,
+    fun `log WARN and ERROR when level WARN is set`() {
+        val systemUnderTest = Logger.createLogger(
+            level = WARN,
+            handle = mockLogHandler,
         )
 
+        systemUnderTest.warn(mockLogMessage, mockLogDetails)
+        systemUnderTest.error(mockLogMessage, mockLogDetails)
+
+        verify(exactly(1)) {
+            mockLogHandler.invoke(WARN, mockLogMessage, mockLogDetails)
+        }
         verify(exactly(1)) {
             mockLogHandler.invoke(ERROR, mockLogMessage, mockLogDetails)
         }
     }
 
     @Test
-    fun `do not log any message when not set in log levels`() {
-        systemUnderTest.setLevels(listOf())
+    fun `do not log anything when level NONE is set`() {
+        val systemUnderTest = Logger.createLogger(
+            level = NONE,
+            handle = mockLogHandler,
+        )
 
-        systemUnderTest.info(
-            message = mockLogMessage,
-            details = mockLogDetails,
-        )
-        systemUnderTest.warn(
-            message = mockLogMessage,
-            details = mockLogDetails,
-        )
-        systemUnderTest.debug(
-            message = mockLogMessage,
-            details = mockLogDetails,
-        )
-        systemUnderTest.error(
-            message = mockLogMessage,
-            details = mockLogDetails,
-        )
+        systemUnderTest.debug(mockLogMessage, mockLogDetails)
+        systemUnderTest.info(mockLogMessage, mockLogDetails)
+        systemUnderTest.warn(mockLogMessage, mockLogDetails)
+        systemUnderTest.error(mockLogMessage, mockLogDetails)
 
         verify(exactly(0)) {
+            mockLogHandler.invoke(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `level can be changed at runtime`() {
+        val systemUnderTest = Logger.createLogger(
+            level = ERROR,
+            handle = mockLogHandler,
+        )
+
+        systemUnderTest.info(mockLogMessage, mockLogDetails)
+
+        systemUnderTest.setLevel(DEBUG)
+
+        systemUnderTest.info(mockLogMessage, mockLogDetails)
+
+        verify(exactly(1)) {
+            mockLogHandler.invoke(INFO, mockLogMessage, mockLogDetails)
+        }
+    }
+
+    @Test
+    fun `hierarchical levels work correctly`() {
+        // Test DEBUG level (should log everything)
+        val debugLogger = Logger.createLogger(level = DEBUG, handle = mockLogHandler)
+
+        debugLogger.debug("test", null)
+        debugLogger.info("test", null)
+        debugLogger.warn("test", null)
+        debugLogger.error("test", null)
+
+        verify(exactly(4)) {
+            mockLogHandler.invoke(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `ERROR level only logs errors`() {
+        val errorLogger = Logger.createLogger(level = ERROR, handle = mockLogHandler)
+
+        errorLogger.debug("test", null)
+        errorLogger.info("test", null)
+        errorLogger.warn("test", null)
+        errorLogger.error("test", null)
+
+        // Only ERROR should be logged
+        verify(exactly(1)) {
+            mockLogHandler.invoke(ERROR, "test", null)
+        }
+
+        // Others should not be logged
+        verify(exactly(0)) {
+            mockLogHandler.invoke(DEBUG, any(), any())
             mockLogHandler.invoke(INFO, any(), any())
             mockLogHandler.invoke(WARN, any(), any())
-            mockLogHandler.invoke(DEBUG, any(), any())
-            mockLogHandler.invoke(ERROR, any(), any())
         }
     }
 }

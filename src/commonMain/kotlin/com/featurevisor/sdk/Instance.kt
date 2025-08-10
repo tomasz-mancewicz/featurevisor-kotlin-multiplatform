@@ -3,7 +3,6 @@
  */
 package com.featurevisor.sdk
 
-import com.featurevisor.sdk.FeaturevisorError.MissingDatafileOptions
 import com.featurevisor.types.*
 import com.featurevisor.types.EventName.*
 import io.ktor.utils.io.charsets.Charsets
@@ -32,247 +31,110 @@ var emptyDatafile = DatafileContent(
     features = emptyList(),
 )
 
-class FeaturevisorInstance private constructor(options: InstanceOptions) {
+class FeaturevisorInstance private constructor(
+    datafile: DatafileContent?,
+    options: InstanceOptions,
+) {
 
     companion object {
-        fun createInstance(options: InstanceOptions): FeaturevisorInstance {
-            return FeaturevisorInstance(options)
+        fun createInstance(
+            datafile: DatafileContent? = null,
+            options: InstanceOptions = InstanceOptions()
+        ): FeaturevisorInstance {
+            return FeaturevisorInstance(datafile, options)
         }
 
         var companionLogger: Logger? = null
     }
 
-    private val on: (EventName, Listener) -> Unit
-    private val off: (EventName) -> Unit
-    private val addListener: (EventName, Listener) -> Unit
-    private val removeListener: (EventName) -> Unit
-    private val removeAllListeners: () -> Unit
+    internal val emitter: Emitter = Emitter()
 
-    internal val fetchCoroutineScope = options.coroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val json: Json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
-    internal val statuses = Statuses(ready = false, refreshInProgress = false)
-
-    internal val logger = options.logger
+    // Configuration
+    internal val logger = options.logger?.also { companionLogger = it }
     internal val initialFeatures = options.initialFeatures
     internal val interceptContext = options.interceptContext
-    internal val emitter: Emitter = Emitter()
-    internal val datafileUrl = options.datafileUrl
-    internal val handleDatafileFetch = options.handleDatafileFetch
-    internal val refreshInterval = options.refreshInterval
-
-    internal var datafileReader: DatafileReader
-
     internal var stickyFeatures = options.stickyFeatures
     internal var bucketKeySeparator = options.bucketKeySeparator
     internal var configureBucketKey = options.configureBucketKey
     internal var configureBucketValue = options.configureBucketValue
-    internal var refreshJob: Job? = null
+
+    // The main datafile reader
+    internal var datafileReader: DatafileReader
+
 
     init {
-        // Create a debug logging function that always outputs
-        fun debugLog(message: String, data: Map<String, Any>? = null) {
-            // Always print to console for debugging
-            println("🔧 Featurevisor: $message")
+        logger?.debug("Creating FeaturevisorInstance")
 
-            // Also try the logger if available
-            try {
-                logger?.debug(message, data ?: emptyMap())
-            } catch (e: Exception) {
-                println("🔧 Logger failed: ${e.message}")
-            }
-        }
+        // Set up event listeners if provided
+        options.onRefresh?.let { emitter.addListener(REFRESH, it) }
+        options.onActivation?.let { emitter.addListener(ACTIVATION, it) }
 
-        fun errorLog(message: String, error: Throwable? = null, data: Map<String, Any>? = null) {
-            // Always print to console for debugging
-            println("🚨 Featurevisor ERROR: $message ${error?.message ?: ""}")
-            error?.printStackTrace()
+        // Initialize with provided datafile or empty one
+        val initialDatafile = datafile ?: createEmptyDatafile()
+        datafileReader = DatafileReader(initialDatafile)
 
-            // Also try the logger if available
-            try {
-                logger?.error(message, (data ?: emptyMap()) + if (error != null) mapOf("error" to error) else emptyMap())
-            } catch (e: Exception) {
-                println("🚨 Logger failed: ${e.message}")
-            }
-        }
-
-        debugLog("🏗️ FeaturevisorInstance init started")
-
-        with(options) {
-            try {
-                debugLog("🏗️ Setting up companion logger")
-                companionLogger = logger
-
-                debugLog("🏗️ Setting up event listeners...")
-                if (onReady != null) {
-                    debugLog("   - Adding READY listener")
-                    emitter.addListener(event = READY, listener = onReady)
-                }
-
-                if (onRefresh != null) {
-                    debugLog("   - Adding REFRESH listener")
-                    emitter.addListener(REFRESH, onRefresh)
-                }
-                if (onUpdate != null) {
-                    debugLog("   - Adding UPDATE listener")
-                    emitter.addListener(UPDATE, onUpdate)
-                }
-                if (onActivation != null) {
-                    debugLog("   - Adding ACTIVATION listener")
-                    emitter.addListener(ACTIVATION, onActivation)
-                }
-                if (onError != null) {
-                    debugLog("   - Adding ERROR listener")
-                    emitter.addListener(ERROR, onError)
-                }
-
-                debugLog("🏗️ Setting up emitter functions")
-                on = emitter::addListener
-                off = emitter::removeListener
-                addListener = emitter::addListener
-                removeListener = emitter::removeListener
-                removeAllListeners = emitter::removeAllListeners
-
-                debugLog("🏗️ Checking initialization options", mapOf(
-                    "hasDatafile" to (datafile != null),
-                    "datafileUrl" to (datafileUrl ?: "NULL"),
-                    "hasCustomScope" to (options.coroutineScope != null)
-                ))
-
-                when {
-                    datafile != null -> {
-                        debugLog("🏗️ Using provided datafile")
-                        datafileReader = DatafileReader(datafile)
-                        statuses.ready = true
-                        emitter.emit(READY, datafile)
-                        debugLog("✅ FeaturevisorInstance static datafile initialization completed")
-                    }
-
-                    datafileUrl != null -> {
-                        debugLog("🏗️ Using datafile URL", mapOf("url" to datafileUrl))
-                        debugLog("🏗️ Creating empty DatafileReader...")
-
-                        try {
-                            datafileReader = DatafileReader(options.datafile ?: emptyDatafile)
-                            debugLog("✅ DatafileReader created successfully")
-                        } catch (e: Exception) {
-                            errorLog("❌ DatafileReader creation failed", e)
-                            throw e
-                        }
-
-                        debugLog("🏗️ Launching coroutine for datafile fetch...")
-
-                        try {
-                            fetchCoroutineScope.launch {
-                                debugLog("🚀 Starting datafile fetch in coroutine...")
-
-                                try {
-                                    debugLog("🔍 About to call fetchDatafileContent...", mapOf(
-                                        "url" to datafileUrl,
-                                        "hasHandler" to (handleDatafileFetch != null)
-                                    ))
-
-                                    fetchDatafileContent(datafileUrl, handleDatafileFetch) { result ->
-                                        debugLog("📋 Fetch callback received", mapOf("success" to result.isSuccess))
-
-                                        if (result.isSuccess) {
-                                            try {
-                                                val datafileContent = result.getOrThrow()
-                                                debugLog("✅ Datafile received", mapOf(
-                                                    "featuresCount" to datafileContent.features.size,
-                                                    "revision" to datafileContent.revision
-                                                ))
-
-                                                datafileReader = DatafileReader(datafileContent)
-                                                statuses.ready = true
-
-                                                debugLog("📤 Emitting READY event with datafile content")
-                                                emitter.emit(READY, datafileContent)
-
-                                                if (refreshInterval != null) {
-                                                    debugLog("🔄 Starting auto-refresh")
-                                                    startRefreshing()
-                                                }
-                                            } catch (e: Exception) {
-                                                errorLog("❌ Error processing successful fetch result", e)
-                                                emitter.emit(ERROR, e)
-                                            }
-                                        } else {
-                                            val exception = result.exceptionOrNull()
-                                            errorLog("❌ Fetch failed", exception, mapOf(
-                                                "exceptionType" to (exception ?: "Unknown")
-                                            ))
-
-                                            emitter.emit(ERROR, exception ?: Exception("Unknown fetch failure"))
-                                        }
-                                    }
-
-                                    debugLog("✅ fetchDatafileContent call completed")
-
-                                } catch (e: Exception) {
-                                    errorLog("❌ Exception in coroutine during fetch", e)
-                                    emitter.emit(ERROR, e)
-                                }
-                            }
-
-                            debugLog("✅ Coroutine launched successfully")
-
-                        } catch (e: Exception) {
-                            errorLog("❌ Failed to launch coroutine", e)
-                            emitter.emit(ERROR, e)
-                        }
-                    }
-
-                    else -> {
-                        errorLog("❌ No datafile or datafileUrl provided")
-                        throw MissingDatafileOptions
-                    }
-                }
-
-                debugLog("✅ FeaturevisorInstance init completed successfully")
-
-            } catch (e: Exception) {
-                errorLog("❌ FeaturevisorInstance init failed", e)
-
-                // Make sure to emit the error so the callback gets it
-                try {
-                    emitter.emit(ERROR, e)
-                } catch (emitError: Exception) {
-                    errorLog("❌ Failed to emit error", emitError)
-                }
-
-                throw e
-            }
-        }
+        logger?.debug("FeaturevisorInstance created with ${initialDatafile.features.size} features")
     }
 
-    fun setLogLevels(levels: List<Logger.LogLevel>) {
-        this.logger?.setLevels(levels)
-    }
-
-    fun setDatafile(datafileJSON: String) {
-        val data = datafileJSON.toByteArray(Charsets.UTF_8)
-        try {
-            val datafileContent = Json.decodeFromString<DatafileContent>(String(data))
-            datafileReader = DatafileReader(datafileContent = datafileContent)
-        } catch (e: Exception) {
-            logger?.error("could not parse datafile", mapOf("error" to e))
-        }
-    }
-
+    /**
+     * Update the datafile and notify listeners
+     */
     fun setDatafile(datafileContent: DatafileContent) {
-        datafileReader = DatafileReader(datafileContent = datafileContent)
+        val oldRevision = datafileReader.getRevision()
+        datafileReader = DatafileReader(datafileContent)
+
+        logger?.debug("Datafile updated", mapOf(
+            "oldRevision" to oldRevision,
+            "newRevision" to datafileContent.revision,
+            "features" to datafileContent.features.size
+        ))
+
+        // Emit refresh event
+        emitter.emit(REFRESH, datafileContent)
+    }
+
+    /**
+     * Update datafile from JSON string
+     */
+    fun setDatafile(datafileJSON: String) {
+        try {
+            val datafileContent = json.decodeFromString<DatafileContent>(datafileJSON)
+
+            setDatafile(datafileContent)
+        } catch (e: Exception) {
+            logger?.error("Could not parse datafile JSON", mapOf("error" to e))
+            throw e
+        }
+    }
+
+    // Configuration methods
+    fun setLogLevel(level: Logger.LogLevel) {
+        logger?.setLevel(level)
     }
 
     fun setStickyFeatures(stickyFeatures: StickyFeatures?) {
         this.stickyFeatures = stickyFeatures
     }
 
-    fun getRevision(): String {
-        return datafileReader.getRevision()
+    // Simple getters
+    fun getRevision(): String = datafileReader.getRevision()
+
+    // Clean shutdown
+    fun shutdown() {
+        emitter.removeAllListeners()
+        logger?.debug("FeaturevisorInstance shut down")
     }
 
-    fun shutdown() {
-        fetchCoroutineScope.cancel()
-        refreshJob?.cancel()
-    }
+    private fun createEmptyDatafile() = DatafileContent(
+        schemaVersion = "1",
+        revision = "empty",
+        attributes = emptyList(),
+        segments = emptyList(),
+        features = emptyList(),
+    )
 }

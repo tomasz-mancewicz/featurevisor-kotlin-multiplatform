@@ -1,28 +1,32 @@
 import com.featurevisor.sdk.FeaturevisorInstance
 import com.featurevisor.sdk.InstanceOptions
 import com.featurevisor.sdk.Logger
+import com.featurevisor.sdk.isEnabled
 import com.featurevisor.types.DatafileContent
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 
 fun main() {
-    println("🚀 Featurevisor JVM Test Runner")
-    println("==============================")
+    println("🚀 Featurevisor JVM Test Runner (New Architecture)")
+    println("=================================================")
 
     runBlocking {
         try {
-            // Test 1: Basic HTTP test
-            testBasicHttp()
+            // Test 1: App fetches datafile
+            testAppFetchesDatafile()
 
             println("\n" + "=".repeat(50) + "\n")
 
-            // Test 2: Featurevisor test
-            testFeaturevisor()
+            // Test 2: Featurevisor with pre-loaded datafile
+            testFeaturevisorWithDatafile()
+
+            println("\n" + "=".repeat(50) + "\n")
+
+            // Test 3: Dynamic datafile updates
+            testDynamicDatafileUpdates()
 
         } catch (e: Exception) {
             println("💣 Test runner failed: ${e.message}")
@@ -33,23 +37,27 @@ fun main() {
     println("\n🏁 Test runner completed")
 }
 
-suspend fun testBasicHttp() {
-    println("🔍 TEST 1: Basic HTTP Request")
-    println("-".repeat(30))
+suspend fun testAppFetchesDatafile() {
+    println("🔍 TEST 1: App Fetches Datafile (New Architecture)")
+    println("-".repeat(50))
 
     try {
+        // Get URL from local.properties via system property
+        val datafileUrl = System.getProperty("test.datafile.url")
+
+        println("📍 Using datafile URL: $datafileUrl")
+
+        // Your app's responsibility: fetch the datafile
         val client = HttpClient()
         println("✅ HttpClient created")
 
-        val response = client.get("https://features.fe.indazn.com/staging/datafile-tag-android.json")
+        val response = client.get(datafileUrl)
         println("✅ Response status: ${response.status}")
-        println("✅ Content-Type: ${response.headers["Content-Type"]}")
 
         val content = response.bodyAsText()
         println("✅ Content length: ${content.length}")
-        println("✅ First 200 chars: ${content.take(200)}")
 
-        // Test JSON parsing
+        // Parse the datafile
         val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
@@ -62,7 +70,31 @@ suspend fun testBasicHttp() {
         println("   - Features: ${datafileContent.features.size}")
 
         client.close()
-        println("🎉 TEST 1 PASSED: Basic HTTP + JSON parsing works!")
+
+        // Now create Featurevisor with the datafile
+        val featurevisor = FeaturevisorInstance.createInstance(
+            datafile = datafileContent,
+            options = InstanceOptions(
+                logger = Logger.createLogger(Logger.LogLevel.INFO)
+            )
+        )
+
+        // Ready to use immediately!
+        println("✅ Featurevisor created and ready")
+        println("   - Revision: ${featurevisor.getRevision()}")
+
+        // Test feature flag evaluation
+        val context = mapOf(
+            "userId" to com.featurevisor.types.AttributeValue.StringValue("test-user")
+        )
+
+        if (datafileContent.features.isNotEmpty()) {
+            val firstFeature = datafileContent.features.first().key
+            val isEnabled = featurevisor.isEnabled(firstFeature, context)
+            println("✅ Feature evaluation works: $firstFeature = $isEnabled")
+        }
+
+        println("🎉 TEST 1 PASSED: App-controlled fetching works!")
 
     } catch (e: Exception) {
         println("❌ TEST 1 FAILED: ${e.javaClass.simpleName}")
@@ -71,144 +103,159 @@ suspend fun testBasicHttp() {
     }
 }
 
-suspend fun testFeaturevisor() {
-    println("🔍 TEST 2: Featurevisor Initialization")
-    println("-".repeat(30))
+suspend fun testFeaturevisorWithDatafile() {
+    println("🔍 TEST 2: Featurevisor with Pre-loaded Datafile")
+    println("-".repeat(50))
 
     try {
-        // Create logger
-        val logger = Logger.createLogger(
-            levels = listOf(
-                Logger.LogLevel.DEBUG,
-                Logger.LogLevel.INFO,
-                Logger.LogLevel.WARN,
-                Logger.LogLevel.ERROR
-            ),
-            handle = { level, message, details ->
-                println("📋 FVISOR-${level.value.uppercase()}: $message")
-                if (!details.isNullOrEmpty()) {
-                    details.forEach { (key, value) ->
-                        println("   $key: $value")
-                    }
-                }
-            }
-        )
-        println("✅ Logger created")
-
-        var testResult: String? = null
-        val testComplete = CompletableDeferred<Unit>()
-
-        val options = InstanceOptions(
-            datafileUrl = "https://features.fe.indazn.com/staging/datafile-tag-android.json",
-            logger = logger,
-            onReady = { args ->
-                println("🎉 FEATUREVISOR READY CALLBACK!")
-                println("   Args received: ${args.size} arguments")
-
-                // The datafile should be the first (and likely only) argument
-                val datafile = args.getOrNull(0)
-
-                when (datafile) {
-                    is DatafileContent -> {
-                        println("   ✅ Datafile type: DatafileContent")
-                        println("   ✅ Schema version: ${datafile.schemaVersion}")
-                        println("   ✅ Revision: ${datafile.revision}")
-                        println("   ✅ Features count: ${datafile.features.size}")
-                        println("   ✅ Attributes count: ${datafile.attributes.size}")
-                        println("   ✅ Segments count: ${datafile.segments.size}")
-
-                        // Show first few feature names
-                        if (datafile.features.isNotEmpty()) {
-                            println("   ✅ Sample features:")
-                            datafile.features.take(3).forEach { feature ->
-                                println("      - ${feature.key}")
-                            }
-                        }
-
-                        testResult = "SUCCESS"
-                    }
-                    else -> {
-                        println("   ❌ Unexpected datafile type: ${datafile?.javaClass?.simpleName}")
-                        println("   📊 All arguments:")
-                        args.forEachIndexed { index, arg ->
-                            println("      [$index] ${arg?.javaClass?.simpleName}: $arg")
-                        }
-                        testResult = "WRONG_TYPE: ${datafile?.javaClass?.simpleName}"
-                    }
-                }
-                testComplete.complete(Unit)
-            },
-            onError = { args ->
-                println("💥 FEATUREVISOR ERROR CALLBACK!")
-                println("   Args received: ${args.size} arguments")
-
-                val error = args.getOrNull(0)
-
-                when {
-                    error is Throwable -> {
-                        println("   🐛 Error is Throwable: ${error.javaClass.simpleName}")
-                        println("   💬 Message: ${error.message}")
-                        println("   📚 Stack trace:")
-                        error.printStackTrace()
-                        testResult = "EXCEPTION: ${error.message}"
-                    }
-                    args.isNotEmpty() -> {
-                        println("   📊 All error arguments:")
-                        args.forEachIndexed { index, arg ->
-                            println("      [$index] ${arg?.javaClass?.simpleName}: $arg")
-                            if (arg is Throwable) {
-                                println("         Exception: ${arg.message}")
-                                arg.printStackTrace()
-                            }
-                        }
-                        testResult = "ERROR: ${args.contentToString()}"
-                    }
-                    else -> {
-                        println("   ❓ Empty error array")
-                        testResult = "EMPTY_ERROR"
-                    }
-                }
-                testComplete.complete(Unit)
-            }
+        // Create a simple test datafile
+        val testDatafile = DatafileContent(
+            schemaVersion = "1",
+            revision = "test-123",
+            attributes = listOf(),
+            segments = listOf(),
+            features = listOf()
         )
 
-        println("📦 Creating Featurevisor instance...")
-        val featurevisor = FeaturevisorInstance.createInstance(options)
-        println("✅ Featurevisor instance created")
-        println("⏳ Waiting for initialization...")
+        var refreshTriggered = false
+        var refreshedDatafile: DatafileContent? = null
 
-        // Wait for completion with timeout
-        withTimeoutOrNull(30000) {
-            testComplete.await()
-        } ?: run {
-            println("⏰ TIMEOUT: No response after 30 seconds")
-            testResult = "TIMEOUT"
-        }
+        // Create Featurevisor with datafile and refresh callback
+        val featurevisor = FeaturevisorInstance.createInstance(
+            datafile = testDatafile,
+            options = InstanceOptions(
+                logger = Logger.createLogger(Logger.LogLevel.DEBUG),
+                onRefresh = { args ->
+                    println("📋 Refresh callback triggered!")
+                    refreshTriggered = true
+                    refreshedDatafile = args[0] as DatafileContent
+                }
+            )
+        )
 
-        // Final result
-        println("\n🏆 FINAL RESULT:")
-        when {
-            testResult?.startsWith("SUCCESS") == true -> {
-                println("✅ TEST 2 PASSED: Featurevisor works perfectly!")
-            }
-            testResult != null -> {
-                println("❌ TEST 2 FAILED: $testResult")
-            }
-            else -> {
-                println("❓ TEST 2 INCONCLUSIVE: Unknown state")
-            }
-        }
-
-        // Check instance status
-        println("📊 Instance status:")
-        println("   - Ready: ${featurevisor.statuses.ready}")
-        println("   - Refresh in progress: ${featurevisor.statuses.refreshInProgress}")
+        println("✅ Featurevisor created with test datafile")
         println("   - Revision: ${featurevisor.getRevision()}")
 
+        // Update with new datafile
+        val updatedDatafile = testDatafile.copy(revision = "test-456")
+        featurevisor.setDatafile(updatedDatafile)
+
+        println("✅ Datafile updated")
+        println("   - New revision: ${featurevisor.getRevision()}")
+        println("   - Refresh triggered: $refreshTriggered")
+        println("   - Refreshed datafile revision: ${refreshedDatafile?.revision}")
+
+        if (refreshTriggered && refreshedDatafile?.revision == "test-456") {
+            println("🎉 TEST 2 PASSED: Datafile updates work!")
+        } else {
+            println("❌ TEST 2 FAILED: Refresh callback not working properly")
+        }
+
     } catch (e: Exception) {
-        println("💣 TEST 2 EXCEPTION: ${e.javaClass.simpleName}")
-        println("   Message: ${e.message}")
-        println("   Stack trace:")
+        println("❌ TEST 2 FAILED: ${e.javaClass.simpleName}")
+        println("   Error: ${e.message}")
         e.printStackTrace()
     }
+}
+
+suspend fun testDynamicDatafileUpdates() {
+    println("🔍 TEST 3: Dynamic Datafile Updates")
+    println("-".repeat(50))
+
+    try {
+        // Start with empty instance
+        val featurevisor = FeaturevisorInstance.createInstance(
+            options = InstanceOptions(
+                logger = Logger.createLogger(Logger.LogLevel.INFO),
+                onRefresh = { args ->
+                    val datafile = args[0] as DatafileContent
+                    println("🔄 Datafile refreshed: ${datafile.revision} (${datafile.features.size} features)")
+                }
+            )
+        )
+
+        println("✅ Started with empty Featurevisor")
+        println("   - Initial revision: ${featurevisor.getRevision()}")
+
+        // Simulate app fetching and updating multiple times
+        repeat(3) { i ->
+            println("\n--- Update $i ---")
+
+            // App fetches new datafile (simulated)
+            val newDatafile = DatafileContent(
+                schemaVersion = "1",
+                revision = "update-$i",
+                attributes = listOf(),
+                segments = listOf(),
+                features = listOf() // Add mock features here if needed
+            )
+
+            // App updates Featurevisor
+            featurevisor.setDatafile(newDatafile)
+
+            println("✅ Updated to revision: ${featurevisor.getRevision()}")
+        }
+
+        // Test JSON string update
+        println("\n--- JSON String Update ---")
+        val jsonDatafile = """
+        {
+            "schemaVersion": "1",
+            "revision": "json-update",
+            "attributes": [],
+            "segments": [],
+            "features": []
+        }
+        """.trimIndent()
+
+        featurevisor.setDatafile(jsonDatafile)
+        println("✅ Updated from JSON: ${featurevisor.getRevision()}")
+
+        println("🎉 TEST 3 PASSED: Dynamic updates work!")
+
+    } catch (e: Exception) {
+        println("❌ TEST 3 FAILED: ${e.javaClass.simpleName}")
+        println("   Error: ${e.message}")
+        e.printStackTrace()
+    }
+}
+
+// Example of how to integrate into Android Repository pattern
+class FeatureRepository {
+    private val httpClient = HttpClient()
+    private val featurevisor = FeaturevisorInstance.createInstance(
+        options = InstanceOptions(
+            logger = Logger.createLogger(Logger.LogLevel.INFO),
+            onRefresh = { args ->
+                val datafile = args[0] as DatafileContent
+                println("Repository: Datafile updated to ${datafile.revision}")
+            }
+        )
+    )
+
+    suspend fun loadDatafile() {
+        try {
+            // Get URL from local.properties
+            val datafileUrl = System.getProperty("test.datafile.url")
+
+            val response = httpClient.get(datafileUrl)
+            val datafileJson = response.bodyAsText()
+
+            // Update Featurevisor with new datafile
+            featurevisor.setDatafile(datafileJson)
+
+        } catch (e: Exception) {
+            // Handle error in your app layer
+            println("Failed to load datafile: ${e.message}")
+        }
+    }
+
+    fun isFeatureEnabled(key: String, userId: String): Boolean {
+        val context = mapOf(
+            "userId" to com.featurevisor.types.AttributeValue.StringValue(userId)
+        )
+        return featurevisor.isEnabled(key, context)
+    }
+
+    fun getCurrentRevision(): String = featurevisor.getRevision()
 }

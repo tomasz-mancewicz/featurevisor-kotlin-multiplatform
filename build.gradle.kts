@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform") version "2.2.0"
@@ -123,11 +124,21 @@ allOpen {
     annotation("com.featurevisor.utils.OpenForMokkery")
 }
 
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 tasks.register<JavaExec>("runTest") {
     group = "application"
     description = "Run Featurevisor test"
     classpath = configurations["jvmRuntimeClasspath"] + kotlin.targets["jvm"].compilations["main"].output.allOutputs
     mainClass.set("TestRunnerKt")
+    systemProperty("test.datafile.url", localProperties.getProperty("test.datafile.url", ""))
+    systemProperty("test.timeout.seconds", localProperties.getProperty("test.timeout.seconds", "30"))
+    systemProperty("test.verbose", localProperties.getProperty("test.verbose", "false"))
 }
 
 publishing {
