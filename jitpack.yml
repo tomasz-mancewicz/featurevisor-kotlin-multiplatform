@@ -1,5 +1,0 @@
-jdk:
-  - openjdk17
-
-env:
-  GRADLE_OPTS: "-Dkotlin.native.ignoreDisabledTargets=true"
