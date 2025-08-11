@@ -143,7 +143,7 @@ publishing {
         create<MavenPublication>("maven") {
             from(components["kotlin"])
 
-            groupId = "com.github.tomasz-mancewicz"
+            groupId = "com.featurevisor"
             artifactId = "featurevisor-kotlin-multiplatform"
             version = project.version.toString()
 
