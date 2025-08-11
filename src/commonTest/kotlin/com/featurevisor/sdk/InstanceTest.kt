@@ -3,18 +3,9 @@
  */
 package com.featurevisor.sdk
 
-import com.featurevisor.sdk.mocks.DatafileFetchHandlerTest
 import com.featurevisor.types.DatafileContent
-import dev.mokkery.answering.returns
-import dev.mokkery.every
-import dev.mokkery.mock
-import dev.mokkery.verify
-import dev.mokkery.verify.VerifyMode.Companion.exactly
 import io.kotest.matchers.shouldBe
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
-import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.test.Test
 

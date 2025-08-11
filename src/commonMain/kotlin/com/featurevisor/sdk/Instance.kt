@@ -8,6 +8,14 @@ typealias ConfigureBucketKey = (Feature, Context, BucketKey) -> BucketKey
 typealias ConfigureBucketValue = (Feature, Context, BucketValue) -> BucketValue
 typealias InterceptContext = (Context) -> Context
 
+var emptyDatafile = DatafileContent(
+    schemaVersion =  "1",
+    revision = "unknown",
+    attributes = emptyList(),
+    segments = emptyList(),
+    features = emptyList(),
+)
+
 class FeaturevisorInstance private constructor(
     datafile: DatafileContent?,
     options: InstanceOptions,
