@@ -1,9 +1,7 @@
 package com.featurevisor.sdk
 
-import com.featurevisor.types.DatafileContent
 import com.featurevisor.types.InitialFeatures
 import com.featurevisor.types.StickyFeatures
-import kotlinx.coroutines.CoroutineScope
 
 typealias Listener = (Array<out Any>) -> Unit
 

@@ -1,10 +1,5 @@
 package com.featurevisor.sdk
 
-import com.featurevisor.sdk.Logger.LogLevel.DEBUG
-import com.featurevisor.sdk.Logger.LogLevel.ERROR
-import com.featurevisor.sdk.Logger.LogLevel.INFO
-import com.featurevisor.sdk.Logger.LogLevel.WARN
-
 typealias LogDetails = Map<String, Any>
 typealias LogHandler = (level: Logger.LogLevel, message: String, details: LogDetails?) -> Unit
 

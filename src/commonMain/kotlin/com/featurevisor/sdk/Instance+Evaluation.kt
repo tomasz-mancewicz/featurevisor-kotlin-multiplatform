@@ -329,7 +329,7 @@ fun FeaturevisorInstance.evaluateFlag(featureKey: FeatureKey, context: Context =
                 return@all true
             }
 
-            if ((requiredFeaturesAreEnabled == false)) {
+            if ((!requiredFeaturesAreEnabled)) {
                 evaluation = Evaluation(
                     featureKey = feature.key,
                     reason = REQUIRED,

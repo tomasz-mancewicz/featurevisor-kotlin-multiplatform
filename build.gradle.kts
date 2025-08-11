@@ -40,22 +40,17 @@ kotlin {
         publishLibraryVariants("release", "debug")
     }
 
-    val hostOs = System.getProperty("os.name")
-    val isMacosX64 = hostOs == "Mac OS X"
-    val isMacosArm64 = hostOs == "Mac OS X" && System.getProperty("os.arch") == "aarch64"
-
-    if (isMacosX64 || isMacosArm64) {
-        listOf(
-            iosX64(),
-            iosArm64(),
-            iosSimulatorArm64()
-        ).forEach { iosTarget ->
-            iosTarget.binaries.framework {
-                baseName = "FeaturevisorSDK"
-                isStatic = true
-            }
+    listOf(
+        iosX64(),
+        iosArm64(),
+        iosSimulatorArm64()
+    ).forEach { iosTarget ->
+        iosTarget.binaries.framework {
+            baseName = "FeaturevisorSDK"
+            isStatic = true
         }
     }
+
 
     sourceSets {
         commonMain.dependencies {
@@ -64,11 +59,6 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
             implementation("com.goncalossilva:murmurhash:0.4.1")
             implementation("net.swiftzer.semver:semver:2.1.0")
-            // Ktor for HTTP client (multiplatform)
-            implementation("io.ktor:ktor-client-core:3.1.3")
-            implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
-            implementation("io.ktor:ktor-client-json:3.1.3")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
         }
 
         commonTest.dependencies {
@@ -84,6 +74,8 @@ kotlin {
             // Test runner dependencies (JVM-only)
             implementation("org.yaml:snakeyaml:2.2")
             implementation("com.google.code.gson:gson:2.10.1")
+            implementation("io.ktor:ktor-client-core:3.1.3")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
         }
 
         jvmTest.dependencies {
@@ -93,15 +85,9 @@ kotlin {
         }
 
         androidMain.dependencies {
-            // Ktor Android engine
-            implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
-            implementation("io.ktor:ktor-client-okhttp:3.1.3")
         }
 
-        if (isMacosX64 || isMacosArm64) {
-            iosMain.dependencies {
-                implementation("io.ktor:ktor-client-darwin:3.1.3")
-            }
+        iosMain.dependencies {
         }
     }
 }
