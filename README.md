@@ -11,13 +11,11 @@ A **Kotlin Multiplatform** SDK for [Featurevisor](https://featurevisor.com) - a 
 
 - 🚀 **Lightweight & Fast** - No network dependencies, pure evaluation engine
 - 🎯 **App-Controlled** - Your app handles datafile fetching, SDK handles evaluation
-- 🔄 **Event-Driven** - Simple callback-based updates
 - 🛡️ **Type-Safe** - Strong typing with sealed classes for context and variables
 - 📱 **Multiplatform** - Android, iOS, JVM support
 - 🎛️ **Hierarchical Logging** - Simple, efficient logging system
 - ⚡ **High Performance** - Evaluate 300+ features in ~3ms
 - 🔧 **V2 Compatible** - Aligned with latest Featurevisor architecture
-- 📞 **Simple Callbacks** - Event-driven updates via callbacks
 
 ## 🏗️ Architecture
 
